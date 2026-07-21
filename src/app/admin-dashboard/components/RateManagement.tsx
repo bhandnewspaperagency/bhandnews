@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
-import { Plus, Trash2, Edit2, Save, X, ChevronDown, TrendingUp, Calendar, IndianRupee } from 'lucide-react';
+import { Save, X, ChevronLeft, ChevronRight, TrendingUp, IndianRupee, Edit2, Check } from 'lucide-react';
 import {
   getAllRates,
   saveRatesForDate,
@@ -10,361 +10,363 @@ import {
   getRatesForDate,
   NEWSPAPERS,
 } from '@/lib/storage';
-import type { DailyRateRecord, NewspaperRateEntry } from '@/lib/storage';
+import type { NewspaperRateEntry } from '@/lib/storage';
+
+// ─── helpers ────────────────────────────────────────────────────────────────
+
+function getMonday(date: Date): Date {
+  const d = new Date(date);
+  const day = d.getDay(); // 0=Sun
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function addDays(date: Date, n: number): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() + n);
+  return d;
+}
+
+function toISO(date: Date): string {
+  return date.toISOString().split('T')[0];
+}
+
+function formatShortDate(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+}
+
+function formatWeekRange(monday: Date): string {
+  const sunday = addDays(monday, 6);
+  const opts: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short' };
+  return `${monday.toLocaleDateString('en-IN', opts)} – ${sunday.toLocaleDateString('en-IN', opts)}`;
+}
+
+const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+// ─── component ───────────────────────────────────────────────────────────────
 
 export default function RateManagement() {
-  const [rateRecords, setRateRecords] = useState<DailyRateRecord[]>([]);
-  const [showForm, setShowForm] = useState(false);
-  const [editingDate, setEditingDate] = useState<string | null>(null);
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [rateInputs, setRateInputs] = useState<Record<string, string>>({});
-  const [expandedDate, setExpandedDate] = useState<string | null>(null);
+  const todayISO = toISO(new Date());
 
-  const loadRates = useCallback(() => {
-    const all = getAllRates().sort((a, b) => b.date.localeCompare(a.date));
-    setRateRecords(all);
+  // week anchor = Monday of the displayed week
+  const [weekStart, setWeekStart] = useState<Date>(() => getMonday(new Date()));
+
+  // editingDay = ISO date string of the day being edited, or null
+  const [editingDay, setEditingDay] = useState<string | null>(null);
+  const [rateInputs, setRateInputs] = useState<Record<string, string>>({});
+
+  // all saved rate records (for lookup)
+  const [, setAllRates] = useState<ReturnType<typeof getAllRates>>([]);
+
+  // week dates (Mon…Sun)
+  const weekDates: string[] = Array.from({ length: 7 }, (_, i) => toISO(addDays(weekStart, i)));
+
+  const reload = useCallback(() => {
+    setAllRates(getAllRates());
   }, []);
 
-  useEffect(() => {
-    loadRates();
-  }, [loadRates]);
+  useEffect(() => { reload(); }, [reload]);
 
-  const initFormForDate = (date: string) => {
-    const existing = getRatesForDate(date);
+  // ── get effective rate for a newspaper on a date ──────────────────────────
+  // (uses saved record for that exact date, or falls back to default)
+  const getRateValue = (newspaper: string, dateISO: string): number => {
+    const saved = getRatesForDate(dateISO);
+    if (saved) {
+      const entry = saved.find((r) => r.newspaper === newspaper);
+      if (entry) return entry.rate;
+    }
+    return NEWSPAPERS.find((n) => n.name === newspaper)?.rate ?? 0;
+  };
+
+  const hasCustomRates = (dateISO: string): boolean => {
+    return !!getRatesForDate(dateISO);
+  };
+
+  // ── edit helpers ──────────────────────────────────────────────────────────
+  const startEdit = (dateISO: string) => {
     const inputs: Record<string, string> = {};
     NEWSPAPERS.forEach((np) => {
-      const found = existing?.find((r) => r.newspaper === np.name);
-      inputs[np.name] = found ? String(found.rate) : String(np.rate);
+      inputs[np.name] = String(getRateValue(np.name, dateISO));
     });
     setRateInputs(inputs);
+    setEditingDay(dateISO);
   };
 
-  const handleNewRate = () => {
-    setEditingDate(null);
-    setSelectedDate(new Date().toISOString().split('T')[0]);
-    initFormForDate(new Date().toISOString().split('T')[0]);
-    setShowForm(true);
+  const cancelEdit = () => {
+    setEditingDay(null);
+    setRateInputs({});
   };
 
-  const handleEditDate = (date: string) => {
-    setEditingDate(date);
-    setSelectedDate(date);
-    initFormForDate(date);
-    setShowForm(true);
-  };
-
-  const handleDateChange = (date: string) => {
-    setSelectedDate(date);
-    initFormForDate(date);
-  };
-
-  const handleRateChange = (newspaper: string, value: string) => {
-    setRateInputs((prev) => ({ ...prev, [newspaper]: value }));
-  };
-
-  const handleSave = () => {
+  const saveEdit = () => {
+    if (!editingDay) return;
     const rates: NewspaperRateEntry[] = NEWSPAPERS.map((np) => ({
       newspaper: np.name,
       rate: parseFloat(rateInputs[np.name] || '0') || 0,
     }));
-
-    const invalid = rates.filter((r) => r.rate <= 0);
-    if (invalid.length > 0) {
-      toast.error(`Please enter valid rates for all newspapers.`);
+    if (rates.some((r) => r.rate <= 0)) {
+      toast.error('Please enter valid rates for all newspapers.');
       return;
     }
-
-    saveRatesForDate(selectedDate, rates);
-    loadRates();
-    setShowForm(false);
-    setEditingDate(null);
-    toast.success(`Rates saved for ${formatDate(selectedDate)}`);
+    saveRatesForDate(editingDay, rates);
+    reload();
+    setEditingDay(null);
+    setRateInputs({});
+    toast.success(`Rates saved for ${formatShortDate(editingDay)}`);
   };
 
-  const handleDelete = (date: string) => {
-    if (!confirm(`Delete all rates for ${formatDate(date)}?`)) return;
-    deleteRatesForDate(date);
-    loadRates();
-    toast.success(`Rates deleted for ${formatDate(date)}`);
+  const clearDay = (dateISO: string) => {
+    if (!confirm(`Clear custom rates for ${formatShortDate(dateISO)}? Default rates will be used.`)) return;
+    deleteRatesForDate(dateISO);
+    reload();
+    toast.success(`Custom rates cleared for ${formatShortDate(dateISO)}`);
   };
 
-  const handleCancel = () => {
-    setShowForm(false);
-    setEditingDate(null);
-  };
+  // ── week navigation ───────────────────────────────────────────────────────
+  const prevWeek = () => setWeekStart((w) => addDays(w, -7));
+  const nextWeek = () => setWeekStart((w) => addDays(w, 7));
+  const goToday = () => setWeekStart(getMonday(new Date()));
 
-  const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr + 'T00:00:00');
-    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', weekday: 'short' });
-  };
+  const isCurrentWeek = toISO(weekStart) === toISO(getMonday(new Date()));
 
-  const getDayLabel = (dateStr: string) => {
-    const today = new Date().toISOString().split('T')[0];
-    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
-    if (dateStr === today) return 'Today';
-    if (dateStr === tomorrow) return 'Tomorrow';
-    if (dateStr > today) return 'Upcoming';
-    return 'Past';
-  };
-
-  const getDayBadgeClass = (dateStr: string) => {
-    const label = getDayLabel(dateStr);
-    if (label === 'Today') return 'bg-green-100 text-green-700';
-    if (label === 'Tomorrow' || label === 'Upcoming') return 'bg-blue-100 text-blue-700';
-    return 'bg-slate-100 text-slate-500';
+  // ── day badge ─────────────────────────────────────────────────────────────
+  const getDayBadge = (dateISO: string) => {
+    if (dateISO === todayISO) return { label: 'Today', cls: 'bg-green-100 text-green-700' };
+    if (dateISO > todayISO) return { label: 'Upcoming', cls: 'bg-blue-100 text-blue-700' };
+    return null;
   };
 
   return (
     <div className="space-y-5 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-xl font-bold text-slate-900">Rate Management</h2>
           <p className="text-sm text-slate-500 mt-0.5">
-            Set newspaper rates per date — used for accurate supply &amp; return billing calculations
+            Set newspaper rates week-by-week — used for accurate supply &amp; return billing
           </p>
         </div>
-        <button
-          onClick={handleNewRate}
-          className="btn-primary flex items-center gap-2"
-        >
-          <Plus size={15} />
-          Set Rates for Date
-        </button>
       </div>
 
-      {/* Info Banner */}
+      {/* ── Info Banner ── */}
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3">
         <TrendingUp size={18} className="text-amber-600 flex-shrink-0 mt-0.5" />
         <div className="text-sm text-amber-800">
           <p className="font-semibold mb-1">How rate-based billing works:</p>
           <ul className="space-y-0.5 text-amber-700 text-xs list-disc list-inside">
-            <li><strong>Supply Qty</strong> is multiplied by the rate set for the <strong>billing date</strong></li>
-            <li><strong>Return Qty</strong> is multiplied by the rate of the <strong>previous day</strong> (when papers were supplied)</li>
-            <li>If no rate is set for a date, the system uses the most recent rate before that date</li>
-            <li>Example: Lokmat ₹3.5 on Mon → ₹4.2 on Tue → Thu billing: supply × ₹3.5 (Thu rate), return × ₹4.2 (Tue rate)</li>
+            <li><strong>Supply Qty</strong> × rate of the <strong>billing date</strong></li>
+            <li><strong>Return Qty</strong> × rate of the <strong>previous day</strong> (when papers were supplied)</li>
+            <li>If no custom rate is set, the system uses the default rate for that newspaper</li>
+            <li>Example: Lokmat ₹3.5 Mon → ₹4.2 Tue → Thu billing: supply × ₹3.5, return × ₹4.2</li>
           </ul>
         </div>
       </div>
 
-      {/* Add/Edit Form */}
-      {showForm && (
-        <div className="bg-white rounded-xl border border-[hsl(220,15%,88%)] shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-[hsl(220,15%,88%)] flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-700">
-                {editingDate ? `Edit Rates — ${formatDate(editingDate)}` : 'Set Rates for a Date'}
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">Enter the rate per newspaper for the selected date</p>
-            </div>
-            <button onClick={handleCancel} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
-              <X size={16} />
+      {/* ── Week Navigator ── */}
+      <div className="bg-white rounded-xl border border-[hsl(220,15%,88%)] shadow-sm overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-[hsl(220,15%,88%)] flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={prevWeek}
+              className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
+              title="Previous week"
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <span className="text-sm font-semibold text-slate-800 min-w-[160px] text-center">
+              {formatWeekRange(weekStart)}
+            </span>
+            <button
+              onClick={nextWeek}
+              className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
+              title="Next week"
+            >
+              <ChevronRight size={18} />
             </button>
           </div>
+          {!isCurrentWeek && (
+            <button
+              onClick={goToday}
+              className="text-xs font-medium text-blue-600 hover:text-blue-800 underline underline-offset-2 transition-colors"
+            >
+              Go to current week
+            </button>
+          )}
+        </div>
 
-          <div className="p-5 space-y-4">
-            {/* Date Picker */}
-            <div className="max-w-xs">
-              <label className="label-text flex items-center gap-1.5" htmlFor="rate-date">
-                <Calendar size={13} />
-                Select Date
-              </label>
-              <input
-                id="rate-date"
-                type="date"
-                className="input-field"
-                value={selectedDate}
-                disabled={!!editingDate}
-                onChange={(e) => handleDateChange(e.target.value)}
-              />
-              {!editingDate && (
-                <p className="text-xs text-slate-400 mt-1">You can set rates for past, today, or future dates</p>
-              )}
-            </div>
+        {/* ── Day Columns ── */}
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[700px]">
+            <thead>
+              <tr className="bg-slate-50 border-b border-[hsl(220,15%,88%)]">
+                <th className="table-header text-left w-36 sticky left-0 bg-slate-50 z-10">Newspaper</th>
+                {weekDates.map((dateISO, i) => {
+                  const badge = getDayBadge(dateISO);
+                  const custom = hasCustomRates(dateISO);
+                  const isEditing = editingDay === dateISO;
+                  return (
+                    <th key={dateISO} className={`table-header text-center min-w-[110px] ${isEditing ? 'bg-blue-50' : ''}`}>
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className={`text-xs font-bold ${dateISO === todayISO ? 'text-green-700' : 'text-slate-600'}`}>
+                          {DAY_NAMES[i]}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-normal">{formatShortDate(dateISO)}</span>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          {badge && (
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${badge.cls}`}>
+                              {badge.label}
+                            </span>
+                          )}
+                          {custom && !badge && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                              Custom
+                            </span>
+                          )}
+                          {custom && badge && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                              Custom
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {NEWSPAPERS.map((np, npIdx) => (
+                <tr
+                  key={np.name}
+                  className={`border-b border-[hsl(220,15%,93%)] ${npIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}
+                >
+                  {/* Newspaper name — sticky */}
+                  <td className={`table-cell text-sm font-medium text-slate-700 sticky left-0 z-10 ${npIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
+                    {np.name}
+                  </td>
 
-            {/* Rate Table */}
-            <div className="overflow-x-auto rounded-xl border border-[hsl(220,15%,88%)]">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-[hsl(220,15%,88%)]">
-                    <th className="table-header text-left w-8">Sr.</th>
-                    <th className="table-header text-left">Newspaper</th>
-                    <th className="table-header text-right">Default Rate (₹)</th>
-                    <th className="table-header text-center">Rate for {formatDate(selectedDate)} (₹)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {NEWSPAPERS.map((np, i) => {
-                    const inputVal = rateInputs[np.name] ?? String(np.rate);
-                    const changed = parseFloat(inputVal) !== np.rate;
+                  {weekDates.map((dateISO) => {
+                    const isEditing = editingDay === dateISO;
+                    const rate = getRateValue(np.name, dateISO);
+                    const isCustom = hasCustomRates(dateISO) && (() => {
+                      const saved = getRatesForDate(dateISO);
+                      return saved?.some((r) => r.newspaper === np.name && r.rate !== np.rate);
+                    })();
+                    const inputVal = isEditing ? (rateInputs[np.name] ?? String(rate)) : null;
+                    const inputChanged = isEditing && parseFloat(inputVal ?? '0') !== np.rate;
+
                     return (
-                      <tr
-                        key={`rate-row-${np.name}`}
-                        className={`border-b border-[hsl(220,15%,93%)] transition-colors ${changed ? 'bg-amber-50/40' : 'hover:bg-slate-50/60'}`}
-                      >
-                        <td className="table-cell text-xs text-slate-400 font-mono w-8">{i + 1}</td>
-                        <td className="table-cell">
-                          <span className={`text-sm font-medium ${changed ? 'text-amber-700' : 'text-slate-700'}`}>
-                            {np.name}
-                          </span>
-                        </td>
-                        <td className="table-cell text-right font-mono text-sm text-slate-400">
-                          ₹{np.rate.toFixed(2)}
-                        </td>
-                        <td className="table-cell text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <span className="text-slate-400 text-sm">₹</span>
+                      <td key={dateISO} className={`table-cell text-center ${isEditing ? 'bg-blue-50/60' : ''}`}>
+                        {isEditing ? (
+                          <div className="flex items-center justify-center gap-0.5">
+                            <span className="text-slate-400 text-xs">₹</span>
                             <input
                               type="number"
                               min={0}
                               step={0.10}
-                              value={inputVal}
-                              onChange={(e) => handleRateChange(np.name, e.target.value)}
-                              className={`w-24 text-center input-field text-sm tabular-nums ${changed ? 'border-amber-300 bg-amber-50 text-amber-800 font-semibold' : ''}`}
-                              placeholder="0.00"
+                              value={inputVal ?? ''}
+                              onChange={(e) =>
+                                setRateInputs((prev) => ({ ...prev, [np.name]: e.target.value }))
+                              }
+                              className={`w-20 text-center input-field text-sm tabular-nums py-1 ${
+                                inputChanged ? 'border-amber-300 bg-amber-50 text-amber-800 font-semibold' : ''
+                              }`}
                             />
                           </div>
-                        </td>
-                      </tr>
+                        ) : (
+                          <span
+                            className={`text-sm tabular-nums font-mono ${
+                              isCustom ? 'text-purple-700 font-semibold' : 'text-slate-600'
+                            }`}
+                          >
+                            ₹{rate.toFixed(2)}
+                          </span>
+                        )}
+                      </td>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
+                </tr>
+              ))}
 
-            {/* Actions */}
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                onClick={handleCancel}
-                className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 border border-[hsl(220,15%,88%)] hover:bg-slate-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                className="btn-primary flex items-center gap-2"
-              >
-                <Save size={15} />
-                Save Rates
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Rate Records List */}
-      <div className="bg-white rounded-xl border border-[hsl(220,15%,88%)] shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-[hsl(220,15%,88%)] flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-slate-700">Rate History &amp; Upcoming Rates</h3>
-          <span className="text-xs text-slate-400">{rateRecords.length} date{rateRecords.length !== 1 ? 's' : ''} configured</span>
-        </div>
-
-        {rateRecords.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center mb-3">
-              <IndianRupee size={22} className="text-slate-400" />
-            </div>
-            <p className="text-sm font-semibold text-slate-600">No rates configured yet</p>
-            <p className="text-xs text-slate-400 mt-1">Click &quot;Set Rates for Date&quot; to add rates for a specific day</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-[hsl(220,15%,93%)]">
-            {rateRecords.map((record) => {
-              const isExpanded = expandedDate === record.date;
-              const dayLabel = getDayLabel(record.date);
-              const badgeClass = getDayBadgeClass(record.date);
-
-              return (
-                <div key={`rate-record-${record.date}`}>
-                  {/* Row Header */}
-                  <div className="flex items-center gap-3 px-5 py-3.5 hover:bg-slate-50/60 transition-colors">
-                    <button
-                      onClick={() => setExpandedDate(isExpanded ? null : record.date)}
-                      className="flex items-center gap-3 flex-1 min-w-0 text-left"
-                    >
-                      <div className="w-9 h-9 rounded-xl bg-[hsl(210,67%,23%)] text-white flex items-center justify-center flex-shrink-0">
-                        <Calendar size={15} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-semibold text-slate-800">{formatDate(record.date)}</span>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${badgeClass}`}>
-                            {dayLabel}
-                          </span>
+              {/* ── Action row ── */}
+              <tr className="border-t-2 border-[hsl(220,15%,85%)] bg-slate-50">
+                <td className="table-cell text-xs text-slate-400 font-medium sticky left-0 bg-slate-50 z-10">Actions</td>
+                {weekDates.map((dateISO) => {
+                  const isEditing = editingDay === dateISO;
+                  const custom = hasCustomRates(dateISO);
+                  return (
+                    <td key={dateISO} className="table-cell text-center">
+                      {isEditing ? (
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={saveEdit}
+                            className="p-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white transition-colors"
+                            title="Save rates"
+                          >
+                            <Check size={13} />
+                          </button>
+                          <button
+                            onClick={cancelEdit}
+                            className="p-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-600 transition-colors"
+                            title="Cancel"
+                          >
+                            <X size={13} />
+                          </button>
                         </div>
-                        <p className="text-xs text-slate-400 mt-0.5">
-                          {record.rates.length} newspapers · Avg ₹{(record.rates.reduce((s, r) => s + r.rate, 0) / record.rates.length).toFixed(2)}
-                        </p>
-                      </div>
-                      <ChevronDown
-                        size={16}
-                        className={`text-slate-400 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
-                      />
-                    </button>
+                      ) : (
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => startEdit(dateISO)}
+                            className="p-1.5 rounded-lg hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition-colors"
+                            title="Edit rates for this day"
+                          >
+                            <Edit2 size={13} />
+                          </button>
+                          {custom && (
+                            <button
+                              onClick={() => clearDay(dateISO)}
+                              className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors"
+                              title="Clear custom rates (revert to default)"
+                            >
+                              <X size={13} />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <button
-                        onClick={() => handleEditDate(record.date)}
-                        className="p-1.5 rounded-lg hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition-colors"
-                        title="Edit rates"
-                      >
-                        <Edit2 size={14} />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(record.date)}
-                        className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors"
-                        title="Delete rates"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Expanded Rate Table */}
-                  {isExpanded && (
-                    <div className="px-5 pb-4 bg-slate-50/50">
-                      <div className="overflow-x-auto rounded-xl border border-[hsl(220,15%,88%)] bg-white">
-                        <table className="w-full">
-                          <thead>
-                            <tr className="bg-slate-50 border-b border-[hsl(220,15%,88%)]">
-                              <th className="table-header text-left">Newspaper</th>
-                              <th className="table-header text-right">Rate (₹)</th>
-                              <th className="table-header text-right">vs Default</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {record.rates.map((r) => {
-                              const defaultRate = NEWSPAPERS.find((n) => n.name === r.newspaper)?.rate ?? r.rate;
-                              const diff = r.rate - defaultRate;
-                              return (
-                                <tr key={`exp-${record.date}-${r.newspaper}`} className="border-b border-[hsl(220,15%,93%)] last:border-0">
-                                  <td className="table-cell text-sm text-slate-700">{r.newspaper}</td>
-                                  <td className="table-cell text-right font-mono text-sm font-semibold text-slate-900">
-                                    ₹{r.rate.toFixed(2)}
-                                  </td>
-                                  <td className="table-cell text-right">
-                                    {diff === 0 ? (
-                                      <span className="text-xs text-slate-400">—</span>
-                                    ) : diff > 0 ? (
-                                      <span className="text-xs font-semibold text-green-600">+₹{diff.toFixed(2)}</span>
-                                    ) : (
-                                      <span className="text-xs font-semibold text-red-500">−₹{Math.abs(diff).toFixed(2)}</span>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+        {/* ── Legend ── */}
+        <div className="px-5 py-3 border-t border-[hsl(220,15%,88%)] flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-1.5">
+            <IndianRupee size={12} className="text-slate-400" />
+            <span className="text-xs text-slate-500">Default rate</span>
           </div>
-        )}
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full bg-purple-200 inline-block" />
+            <span className="text-xs text-slate-500">Custom rate set</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full bg-green-200 inline-block" />
+            <span className="text-xs text-slate-500">Today</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full bg-blue-200 inline-block" />
+            <span className="text-xs text-slate-500">Upcoming</span>
+          </div>
+          <div className="ml-auto flex items-center gap-1.5">
+            <Save size={12} className="text-slate-400" />
+            <span className="text-xs text-slate-400">Click ✏️ on any day column to edit its rates</span>
+          </div>
+        </div>
       </div>
     </div>
   );
