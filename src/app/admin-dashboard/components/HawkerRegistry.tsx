@@ -98,6 +98,36 @@ export default function HawkerRegistry() {
     setEditHawker(null);
   };
 
+  const handleExportCSV = () => {
+    const rows = filtered;
+    if (rows.length === 0) {
+      toast.error('No data to export.');
+      return;
+    }
+    const header = ['ID', 'Name', 'Contact', 'Area', 'Payment Type', 'Status', 'Newspapers', 'Notes'];
+    const csvRows = rows.map((h) => [
+      String(h.id),
+      h.name,
+      h.contact,
+      h.area,
+      h.paymentType,
+      h.status,
+      (h.newspapers ?? []).join('; '),
+      h.notes ?? '',
+    ]);
+    const csv = [header, ...csvRows]
+      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `hawker-registry-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${rows.length} hawkers to CSV.`);
+  };
+
   const SortIcon = ({ col }: { col: SortKey }) => (
     <span className="inline-flex flex-col ml-1">
       <ChevronUp size={9} className={sortKey === col && sortDir === 'asc' ? 'text-[hsl(210,67%,23%)]' : 'text-slate-300'} />
@@ -113,9 +143,9 @@ export default function HawkerRegistry() {
           <p className="text-sm text-slate-500 mt-0.5">{filtered.length} hawkers · {hawkers.filter(h => h.status === 'Active').length} active</p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 border border-[hsl(220,15%,88%)] hover:bg-slate-50 transition-colors min-h-[44px]">
+          <button onClick={handleExportCSV} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 border border-[hsl(220,15%,88%)] hover:bg-slate-50 transition-colors min-h-[44px]">
             <Download size={14} />
-            <span className="hidden sm:inline">Export</span>
+            <span className="hidden sm:inline">Export CSV</span>
           </button>
           <button
             onClick={() => { setEditHawker(null); setShowModal(true); }}

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { RefreshCw, Bell, Search, Printer, Menu } from 'lucide-react';
 import { toast } from 'sonner';
+import { getHawkers, getBillingRecords } from '@/lib/storage';
 
 const SECTION_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
@@ -33,9 +34,11 @@ export default function AdminTopbar({ activeSection, onMenuToggle }: AdminTopbar
 
   const handleSync = async () => {
     setSyncing(true);
-    await new Promise((r) => setTimeout(r, 1800));
+    await new Promise((r) => setTimeout(r, 800));
+    const hawkers = getHawkers();
+    const billing = getBillingRecords();
     setSyncing(false);
-    toast.success('Google Sheets synced — 180 records updated successfully.');
+    toast.success(`Data synced — ${hawkers.length} hawkers · ${billing.length} billing records loaded from local storage.`);
   };
 
   const handlePrint = () => {

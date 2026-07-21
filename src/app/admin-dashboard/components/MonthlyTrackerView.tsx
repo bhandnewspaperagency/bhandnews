@@ -4,6 +4,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Search, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import { getMonthlyTracker, NEWSPAPERS } from '@/lib/storage';
 import type { MonthlyTrackerRow } from '@/lib/storage';
+import { toast } from 'sonner';
 
 const VISIBLE_NEWSPAPERS = NEWSPAPERS?.slice(0, 8);
 
@@ -34,6 +35,32 @@ export default function MonthlyTrackerView() {
   );
   const grandTotalSum = filtered?.reduce((sum, row) => sum + row?.grandTotal, 0);
 
+  const handleExportCSV = () => {
+    if (!filtered || filtered.length === 0) {
+      toast.error('No data to export.');
+      return;
+    }
+    const npNames = VISIBLE_NEWSPAPERS?.map((np) => np?.name) ?? [];
+    const header = ['ID', 'Hawker Name', ...npNames, 'Grand Total'];
+    const csvRows = filtered.map((row) => [
+      String(row?.hawkerId),
+      row?.hawkerName,
+      ...npNames.map((np) => String(row?.newspapers?.[np]?.toFixed(2) ?? '0.00')),
+      row?.grandTotal?.toFixed(2),
+    ]);
+    const csv = [header, ...csvRows]
+      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `monthly-tracker-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${filtered.length} rows to CSV.`);
+  };
+
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -42,7 +69,7 @@ export default function MonthlyTrackerView() {
           <p className="text-sm text-slate-500 mt-0.5">Newspaper-wise monthly billing per hawker</p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-slate-600 border border-[hsl(220,15%,88%)] hover:bg-slate-50 transition-colors">
+          <button onClick={handleExportCSV} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-slate-600 border border-[hsl(220,15%,88%)] hover:bg-slate-50 transition-colors">
             <Download size={14} />
             Export CSV
           </button>
