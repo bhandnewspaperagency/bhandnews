@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Newspaper, LayoutDashboard, Users, ClipboardList, BarChart3, Settings, ChevronLeft, ChevronRight, LogOut, Calendar, IndianRupee, Activity, Layers } from 'lucide-react';
+import { Newspaper, LayoutDashboard, Users, ClipboardList, BarChart3, Settings, ChevronLeft, ChevronRight, LogOut, Calendar, IndianRupee, Activity, Layers, HardDriveDownload } from 'lucide-react';
 
 interface NavItem {
   id: string;
@@ -21,6 +21,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'tracker', label: 'Tracker', icon: <Activity size={18} />, section: 'MAIN' },
   { id: 'groups', label: 'Newspaper Groups', icon: <Layers size={18} />, section: 'MAIN' },
   { id: 'reports', label: 'Reports', icon: <BarChart3 size={18} />, section: 'REPORTS' },
+  { id: 'backup', label: 'Backup & Restore', icon: <HardDriveDownload size={18} />, section: 'SYSTEM' },
   { id: 'settings', label: 'Settings', icon: <Settings size={18} />, section: 'SYSTEM' },
 ];
 
