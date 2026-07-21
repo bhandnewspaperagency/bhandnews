@@ -10,6 +10,7 @@ import type { Hawker, DailyBillingRecord } from '@/lib/storage';
 interface BillingRow {
   supplyQty: number;
   returnQty: number;
+  freePvc: number;
 }
 
 interface BillingFormValues {
@@ -26,7 +27,7 @@ export default function DailyBillingEntry() {
   const [submitted, setSubmitted] = useState(false);
   const [whatsappSending, setWhatsappSending] = useState(false);
   const [rows, setRows] = useState<BillingRow[]>(
-    NEWSPAPERS.map(() => ({ supplyQty: 0, returnQty: 0 }))
+    NEWSPAPERS.map(() => ({ supplyQty: 0, returnQty: 0, freePvc: 0 }))
   );
 
   const today = new Date().toISOString().split('T')[0];
@@ -46,7 +47,7 @@ export default function DailyBillingEntry() {
   const paymentType = watch('paymentType');
   const billDate = watch('date');
 
-  const updateRow = (index: number, field: 'supplyQty' | 'returnQty', value: string) => {
+  const updateRow = (index: number, field: 'supplyQty' | 'returnQty' | 'freePvc', value: string) => {
     const numVal = parseInt(value) || 0;
     setRows((prev) => {
       const next = [...prev];
@@ -119,7 +120,7 @@ export default function DailyBillingEntry() {
 
   const handleReset = () => {
     setSelectedHawker(null);
-    setRows(NEWSPAPERS.map(() => ({ supplyQty: 0, returnQty: 0 })));
+    setRows(NEWSPAPERS.map(() => ({ supplyQty: 0, returnQty: 0, freePvc: 0 })));
     setSubmitted(false);
     setValue('hawkerId', '');
   };
@@ -236,6 +237,7 @@ export default function DailyBillingEntry() {
                 <th className="table-header text-right">Rate (₹)</th>
                 <th className="table-header text-center">Supply Qty<br/><span className="font-normal normal-case text-slate-400">(अंक)</span></th>
                 <th className="table-header text-center">Return<br/><span className="font-normal normal-case text-slate-400">(परत)</span></th>
+                <th className="table-header text-center">Free PVC<br/><span className="font-normal normal-case text-slate-400">(मोफत)</span></th>
                 <th className="table-header text-center bg-blue-50">Net Qty</th>
                 <th className="table-header text-right bg-blue-50">Total (₹)<br/><span className="font-normal normal-case text-slate-400">(रुपये)</span></th>
               </tr>
@@ -281,6 +283,16 @@ export default function DailyBillingEntry() {
                         placeholder="0"
                       />
                     </td>
+                    <td className="table-cell text-center">
+                      <input
+                        type="number"
+                        min={0}
+                        value={rows[i]?.freePvc || ''}
+                        onChange={(e) => updateRow(i, 'freePvc', e.target.value)}
+                        className="w-20 text-center input-field text-sm tabular-nums"
+                        placeholder="0"
+                      />
+                    </td>
                     <td className="table-cell text-center bg-blue-50/40">
                       <span className={`font-mono text-sm font-semibold ${netQty > 0 ? 'text-[hsl(210,67%,23%)]' : 'text-slate-300'}`}>
                         {netQty}
@@ -298,6 +310,9 @@ export default function DailyBillingEntry() {
             <tfoot>
               <tr className="bg-[hsl(210,67%,23%)] text-white">
                 <td colSpan={5} className="px-4 py-3 text-sm font-semibold">Grand Total</td>
+                <td className="px-4 py-3 text-center font-mono font-bold">
+                  {NEWSPAPERS.reduce((s, _, i) => s + (rows[i]?.freePvc || 0), 0)}
+                </td>
                 <td className="px-4 py-3 text-center font-mono font-bold">
                   {NEWSPAPERS.reduce((s, _, i) => s + getNetQty(i), 0)}
                 </td>
