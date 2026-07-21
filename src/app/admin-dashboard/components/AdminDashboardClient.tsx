@@ -9,6 +9,7 @@ import HawkerRegistry from './HawkerRegistry';
 import MonthlyTrackerView from './MonthlyTrackerView';
 import ReportsView from './ReportsView';
 import RateManagement from './RateManagement';
+import TrackerView from './TrackerView';
 
 export default function AdminDashboardClient() {
   const [activeSection, setActiveSection] = useState('dashboard');
@@ -20,6 +21,7 @@ export default function AdminDashboardClient() {
       case 'rates': return <RateManagement />;
       case 'hawkers': return <HawkerRegistry />;
       case 'monthly': return <MonthlyTrackerView />;
+      case 'tracker': return <TrackerView />;
       case 'reports': return <ReportsView />;
       default: return <DashboardOverview onNavigate={setActiveSection} />;
     }
