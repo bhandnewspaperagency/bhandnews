@@ -22,6 +22,7 @@ const KEYS = {
   MONTHLY: 'bhand_monthly',
   AUTH: 'bhand_auth_session',
   SEEDED: 'bhand_seeded_v1',
+  RATES: 'bhand_newspaper_rates',
 };
 
 function isBrowser() {
@@ -197,4 +198,90 @@ export function loginHawker(name: string, contact: string): Hawker | null {
     return hawker;
   }
   return null;
+}
+
+// ─── Newspaper Rates ──────────────────────────────────────────────────────────
+
+export interface NewspaperRateEntry {
+  newspaper: string;
+  rate: number;
+}
+
+export interface DailyRateRecord {
+  date: string; // YYYY-MM-DD
+  rates: NewspaperRateEntry[];
+}
+
+/**
+ * Get all daily rate records, sorted by date descending.
+ */
+export function getAllRates(): DailyRateRecord[] {
+  return read<DailyRateRecord[]>(KEYS.RATES) ?? [];
+}
+
+/**
+ * Get the rate for a specific newspaper on a specific date.
+ * Falls back to the most recent rate before that date, then to the default NEWSPAPERS rate.
+ */
+export function getRateForDate(newspaper: string, date: string): number {
+  const all = getAllRates();
+  // Sort descending by date
+  const sorted = [...all].sort((a, b) => b.date.localeCompare(a.date));
+  // Find the most recent record on or before the given date
+  for (const record of sorted) {
+    if (record.date <= date) {
+      const entry = record.rates.find((r) => r.newspaper === newspaper);
+      if (entry !== undefined) return entry.rate;
+    }
+  }
+  // Fallback to default rate from NEWSPAPERS
+  const np = NEWSPAPERS.find((n) => n.name === newspaper);
+  return np?.rate ?? 0;
+}
+
+/**
+ * Get the most recent rate record strictly BEFORE the given date (for return qty calculation).
+ * This represents the rate on the day the papers were originally supplied.
+ */
+export function getPreviousDayRate(newspaper: string, date: string): number {
+  const all = getAllRates();
+  const sorted = [...all].sort((a, b) => b.date.localeCompare(a.date));
+  for (const record of sorted) {
+    if (record.date < date) {
+      const entry = record.rates.find((r) => r.newspaper === newspaper);
+      if (entry !== undefined) return entry.rate;
+    }
+  }
+  // Fallback: same as current date rate
+  return getRateForDate(newspaper, date);
+}
+
+/**
+ * Save or update rates for a specific date.
+ */
+export function saveRatesForDate(date: string, rates: NewspaperRateEntry[]): void {
+  const all = getAllRates();
+  const idx = all.findIndex((r) => r.date === date);
+  if (idx >= 0) {
+    all[idx] = { date, rates };
+  } else {
+    all.push({ date, rates });
+  }
+  write(KEYS.RATES, all);
+}
+
+/**
+ * Delete rate record for a specific date.
+ */
+export function deleteRatesForDate(date: string): void {
+  const all = getAllRates().filter((r) => r.date !== date);
+  write(KEYS.RATES, all);
+}
+
+/**
+ * Get rates for a specific date (exact match).
+ */
+export function getRatesForDate(date: string): NewspaperRateEntry[] | null {
+  const record = getAllRates().find((r) => r.date === date);
+  return record?.rates ?? null;
 }

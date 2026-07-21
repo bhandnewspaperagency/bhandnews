@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Newspaper, LayoutDashboard, Users, ClipboardList, BarChart3, Settings, ChevronLeft, ChevronRight, LogOut, Calendar,  } from 'lucide-react';
+import { Newspaper, LayoutDashboard, Users, ClipboardList, BarChart3, Settings, ChevronLeft, ChevronRight, LogOut, Calendar, IndianRupee } from 'lucide-react';
 
 interface NavItem {
   id: string;
@@ -15,6 +15,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} />, section: 'MAIN' },
   { id: 'billing', label: 'Daily Billing', icon: <ClipboardList size={18} />, badge: 5, section: 'MAIN' },
+  { id: 'rates', label: 'Rate Management', icon: <IndianRupee size={18} />, section: 'MAIN' },
   { id: 'hawkers', label: 'Hawker Registry', icon: <Users size={18} />, section: 'MAIN' },
   { id: 'monthly', label: 'Monthly Tracker', icon: <Calendar size={18} />, section: 'MAIN' },
   { id: 'reports', label: 'Reports', icon: <BarChart3 size={18} />, section: 'REPORTS' },

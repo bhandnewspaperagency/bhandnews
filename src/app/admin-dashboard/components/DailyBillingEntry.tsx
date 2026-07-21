@@ -3,8 +3,8 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
-import { Search, Send, CheckCircle2, AlertCircle, MessageSquare, ChevronDown, Printer } from 'lucide-react';
-import { getHawkers, saveBillingRecord, NEWSPAPERS } from '@/lib/storage';
+import { Search, Send, CheckCircle2, AlertCircle, MessageSquare, ChevronDown, Printer, Info } from 'lucide-react';
+import { getHawkers, saveBillingRecord, NEWSPAPERS, getRateForDate, getPreviousDayRate } from '@/lib/storage';
 import type { Hawker, DailyBillingRecord } from '@/lib/storage';
 
 interface BillingRow {
@@ -29,6 +29,9 @@ export default function DailyBillingEntry() {
   const [rows, setRows] = useState<BillingRow[]>(
     NEWSPAPERS.map(() => ({ supplyQty: 0, returnQty: 0, freePvc: 0 }))
   );
+  // Resolved rates per newspaper for current bill date
+  const [supplyRates, setSupplyRates] = useState<number[]>(NEWSPAPERS.map((np) => np.rate));
+  const [returnRates, setReturnRates] = useState<number[]>(NEWSPAPERS.map((np) => np.rate));
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -47,6 +50,15 @@ export default function DailyBillingEntry() {
   const paymentType = watch('paymentType');
   const billDate = watch('date');
 
+  // Recalculate rates whenever billDate changes
+  useEffect(() => {
+    if (!billDate) return;
+    const sRates = NEWSPAPERS.map((np) => getRateForDate(np.name, billDate));
+    const rRates = NEWSPAPERS.map((np) => getPreviousDayRate(np.name, billDate));
+    setSupplyRates(sRates);
+    setReturnRates(rRates);
+  }, [billDate]);
+
   const updateRow = (index: number, field: 'supplyQty' | 'returnQty' | 'freePvc', value: string) => {
     const numVal = parseInt(value) || 0;
     setRows((prev) => {
@@ -57,8 +69,17 @@ export default function DailyBillingEntry() {
   };
 
   const getNetQty = (i: number) => Math.max(0, (rows[i]?.supplyQty || 0) - (rows[i]?.returnQty || 0));
-  const getTotal = (i: number) => getNetQty(i) * NEWSPAPERS[i].rate;
+
+  // Total = (supplyQty × supplyRate) - (returnQty × returnRate)
+  const getTotal = (i: number) => {
+    const supply = (rows[i]?.supplyQty || 0) * supplyRates[i];
+    const ret = (rows[i]?.returnQty || 0) * returnRates[i];
+    return Math.max(0, supply - ret);
+  };
+
   const getTotalBill = () => NEWSPAPERS.reduce((sum, _, i) => sum + getTotal(i), 0);
+
+  const ratesAreDifferent = (i: number) => supplyRates[i] !== returnRates[i];
 
   const filteredHawkers = hawkers.filter(
     (h) =>
@@ -83,7 +104,7 @@ export default function DailyBillingEntry() {
     const entries = NEWSPAPERS.map((np, i) => ({
       srNo: i + 1,
       newspaper: np.name,
-      rate: np.rate,
+      rate: supplyRates[i],
       supplyQty: rows[i]?.supplyQty || 0,
       returnQty: rows[i]?.returnQty || 0,
       netQty: getNetQty(i),
@@ -124,6 +145,8 @@ export default function DailyBillingEntry() {
     setSubmitted(false);
     setValue('hawkerId', '');
   };
+
+  const hasRateDifference = NEWSPAPERS.some((_, i) => ratesAreDifferent(i));
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -222,11 +245,22 @@ export default function DailyBillingEntry() {
         </div>
       </div>
 
+      {/* Rate Info Banner — shown when supply and return rates differ */}
+      {hasRateDifference && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex gap-2.5">
+          <Info size={15} className="text-blue-500 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-blue-700">
+            <strong>Rate change detected:</strong> Supply qty uses today&apos;s rate; return qty uses the previous day&apos;s rate.
+            Columns show both rates where they differ.
+          </p>
+        </div>
+      )}
+
       {/* Billing Table */}
       <div className="bg-white rounded-xl border border-[hsl(220,15%,88%)] shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-[hsl(220,15%,88%)]">
           <h3 className="text-sm font-semibold text-slate-700">Step 2 — Enter Newspaper Quantities</h3>
-          <p className="text-xs text-slate-400 mt-0.5">Net Qty and Total are auto-calculated</p>
+          <p className="text-xs text-slate-400 mt-0.5">Net Qty and Total are auto-calculated using date-based rates</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -234,7 +268,8 @@ export default function DailyBillingEntry() {
               <tr className="border-b border-[hsl(220,15%,88%)]">
                 <th className="table-header text-left w-8">Sr.</th>
                 <th className="table-header text-left">Newspaper</th>
-                <th className="table-header text-right">Rate (₹)</th>
+                <th className="table-header text-right">Supply Rate (₹)<br/><span className="font-normal normal-case text-slate-400 text-[10px]">(today)</span></th>
+                <th className="table-header text-right">Return Rate (₹)<br/><span className="font-normal normal-case text-slate-400 text-[10px]">(prev day)</span></th>
                 <th className="table-header text-center">Supply Qty<br/><span className="font-normal normal-case text-slate-400">(अंक)</span></th>
                 <th className="table-header text-center">Return<br/><span className="font-normal normal-case text-slate-400">(परत)</span></th>
                 <th className="table-header text-center">Free PVC<br/><span className="font-normal normal-case text-slate-400">(मोफत)</span></th>
@@ -247,6 +282,7 @@ export default function DailyBillingEntry() {
                 const netQty = getNetQty(i);
                 const total = getTotal(i);
                 const hasEntry = rows[i]?.supplyQty > 0;
+                const ratesDiffer = ratesAreDifferent(i);
                 return (
                   <tr
                     key={`billing-row-${np.name}`}
@@ -261,7 +297,12 @@ export default function DailyBillingEntry() {
                       </span>
                     </td>
                     <td className="table-cell text-right font-mono text-sm text-slate-600">
-                      {np.rate.toFixed(2)}
+                      {supplyRates[i]?.toFixed(2) ?? np.rate.toFixed(2)}
+                    </td>
+                    <td className="table-cell text-right font-mono text-sm">
+                      <span className={ratesDiffer ? 'text-amber-600 font-semibold' : 'text-slate-400'}>
+                        {returnRates[i]?.toFixed(2) ?? np.rate.toFixed(2)}
+                      </span>
                     </td>
                     <td className="table-cell text-center">
                       <input
@@ -309,7 +350,7 @@ export default function DailyBillingEntry() {
             </tbody>
             <tfoot>
               <tr className="bg-[hsl(210,67%,23%)] text-white">
-                <td colSpan={5} className="px-4 py-3 text-sm font-semibold">Grand Total</td>
+                <td colSpan={6} className="px-4 py-3 text-sm font-semibold">Grand Total</td>
                 <td className="px-4 py-3 text-center font-mono font-bold">
                   {NEWSPAPERS.reduce((s, _, i) => s + (rows[i]?.freePvc || 0), 0)}
                 </td>
