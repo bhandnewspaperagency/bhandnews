@@ -146,6 +146,235 @@ export default function DailyBillingEntry() {
     setValue('hawkerId', '');
   };
 
+  const handlePrint = () => {
+    const hawkerName = selectedHawker?.name ?? 'N/A';
+    const hawkerArea = selectedHawker?.area ?? '';
+    const hawkerContact = selectedHawker?.contact ?? '';
+    const hawkerId = selectedHawker?.id ?? '';
+    const date = billDate ?? today;
+    const payType = paymentType;
+
+    const tableRows = NEWSPAPERS.map((np, i) => {
+      const netQty = getNetQty(i);
+      const total = getTotal(i);
+      return `
+        <tr>
+          <td>${i + 1}</td>
+          <td class="left">${np.name}</td>
+          <td>${supplyRates[i]?.toFixed(2) ?? np.rate.toFixed(2)}</td>
+          <td>${returnRates[i]?.toFixed(2) ?? np.rate.toFixed(2)}</td>
+          <td>${rows[i]?.supplyQty || 0}</td>
+          <td>${rows[i]?.returnQty || 0}</td>
+          <td>${rows[i]?.freePvc || 0}</td>
+          <td>${netQty}</td>
+          <td class="right">${total > 0 ? '₹' + total.toFixed(2) : '—'}</td>
+        </tr>`;
+    }).join('');
+
+    const totalFreePvc = NEWSPAPERS.reduce((s, _, i) => s + (rows[i]?.freePvc || 0), 0);
+    const totalNetQty = NEWSPAPERS.reduce((s, _, i) => s + getNetQty(i), 0);
+    const grandTotal = getTotalBill();
+
+    const printContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Daily Bill — ${hawkerName} — ${date}</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 12mm 10mm;
+    }
+    @page landscape {
+      size: A4 landscape;
+      margin: 10mm 12mm;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 11px;
+      color: #1e293b;
+      background: #fff;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 2px solid #1e3a5f;
+      padding-bottom: 8px;
+      margin-bottom: 10px;
+    }
+    .header .agency {
+      font-size: 16px;
+      font-weight: 700;
+      color: #1e3a5f;
+    }
+    .header .sub {
+      font-size: 10px;
+      color: #64748b;
+      margin-top: 2px;
+    }
+    .header .bill-info {
+      text-align: right;
+      font-size: 10px;
+      color: #475569;
+    }
+    .header .bill-info strong {
+      font-size: 12px;
+      color: #1e3a5f;
+    }
+    .hawker-bar {
+      display: flex;
+      gap: 24px;
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      padding: 6px 10px;
+      margin-bottom: 10px;
+      font-size: 10px;
+    }
+    .hawker-bar .field label {
+      color: #94a3b8;
+      display: block;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .hawker-bar .field span {
+      font-weight: 600;
+      color: #1e293b;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10.5px;
+    }
+    thead tr {
+      background: #1e3a5f;
+      color: #fff;
+    }
+    thead th {
+      padding: 6px 7px;
+      text-align: center;
+      font-weight: 600;
+      white-space: nowrap;
+      border: 1px solid #1e3a5f;
+    }
+    thead th.left { text-align: left; }
+    tbody tr:nth-child(even) { background: #f8fafc; }
+    tbody tr:hover { background: #eff6ff; }
+    tbody td {
+      padding: 5px 7px;
+      text-align: center;
+      border: 1px solid #e2e8f0;
+    }
+    tbody td.left { text-align: left; }
+    tbody td.right { text-align: right; font-weight: 600; }
+    tfoot tr {
+      background: #1e3a5f;
+      color: #fff;
+    }
+    tfoot td {
+      padding: 7px 7px;
+      text-align: center;
+      border: 1px solid #1e3a5f;
+      font-weight: 700;
+    }
+    tfoot td.label { text-align: left; font-size: 12px; }
+    tfoot td.grand { text-align: right; font-size: 13px; }
+    .footer {
+      margin-top: 14px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 9.5px;
+      color: #94a3b8;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 6px;
+    }
+    .sig-line {
+      margin-top: 20px;
+      display: flex;
+      justify-content: flex-end;
+    }
+    .sig-line .box {
+      border-top: 1px solid #1e3a5f;
+      width: 140px;
+      text-align: center;
+      padding-top: 4px;
+      font-size: 9px;
+      color: #475569;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="agency">Bhand Newspaper Agency</div>
+      <div class="sub">Daily Billing Statement</div>
+    </div>
+    <div class="bill-info">
+      <strong>Date: ${new Date(date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</strong><br/>
+      Payment: ${payType}
+    </div>
+  </div>
+
+  <div class="hawker-bar">
+    <div class="field"><label>Hawker ID</label><span>${hawkerId}</span></div>
+    <div class="field"><label>Name</label><span>${hawkerName}</span></div>
+    <div class="field"><label>Area</label><span>${hawkerArea}</span></div>
+    <div class="field"><label>Contact</label><span>${hawkerContact}</span></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Sr.</th>
+        <th class="left">Newspaper</th>
+        <th>Supply Rate (₹)</th>
+        <th>Return Rate (₹)</th>
+        <th>Supply Qty</th>
+        <th>Return</th>
+        <th>Free PVC</th>
+        <th>Net Qty</th>
+        <th>Total (₹)</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${tableRows}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="6" class="label">Grand Total</td>
+        <td>${totalFreePvc}</td>
+        <td>${totalNetQty}</td>
+        <td class="grand">₹${grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <div class="sig-line"><div class="box">Authorised Signature</div></div>
+
+  <div class="footer">
+    <span>Printed on: ${new Date().toLocaleString('en-IN')}</span>
+    <span>Bhand Newspaper Agency — Internal Copy</span>
+  </div>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank', 'width=900,height=700');
+    if (!win) {
+      toast.error('Pop-up blocked. Please allow pop-ups and try again.');
+      return;
+    }
+    win.document.write(printContent);
+    win.document.close();
+    win.focus();
+    setTimeout(() => {
+      win.print();
+      win.close();
+    }, 400);
+  };
+
   const hasRateDifference = NEWSPAPERS.some((_, i) => ratesAreDifferent(i));
 
   return (
@@ -469,8 +698,8 @@ export default function DailyBillingEntry() {
           </button>
           <button
             type="button"
-            onClick={() => window.print()}
-            className="hidden sm:flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold border border-[hsl(220,15%,88%)] text-slate-600 hover:bg-slate-50 transition-colors min-h-[44px]"
+            onClick={handlePrint}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold border border-[hsl(220,15%,88%)] text-slate-600 hover:bg-slate-50 transition-colors min-h-[44px]"
           >
             <Printer size={15} />
             Print
