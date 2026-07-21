@@ -52,9 +52,16 @@ function printTable(title: string, html: string) {
       td { padding: 5px 10px; border-bottom: 1px solid #e2e8f0; font-size: 11px; }
       tr:nth-child(even) td { background: #f8fafc; }
       tfoot td { background: #1e3a5f; color: white; font-weight: bold; padding: 6px 10px; }
-      @media print { button { display: none; } }
+      @media print { .no-print { display: none !important; } }
     </style></head>
-    <body>${html}<br/><button onClick="window.print()">🖨️ Print / Save as PDF</button></body></html>
+    <body>
+      ${html}
+      <br/>
+      <div class="no-print" style="margin-top:16px;">
+        <button onClick="window.print()" style="padding:8px 18px;background:#1e3a5f;color:white;border:none;border-radius:6px;font-size:13px;cursor:pointer;">🖨️ Print / Save as PDF</button>
+      </div>
+      <script>window.onload = function(){ window.focus(); window.print(); }<\/script>
+    </body></html>
   `);
   win.document.close();
 }
