@@ -150,19 +150,19 @@ export default function DailyBillingEntry() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start sm:items-center justify-between gap-2">
         <div>
           <h2 className="text-xl font-bold text-slate-900">Daily Billing Entry</h2>
           <p className="text-sm text-slate-500 mt-0.5">Enter supply and return quantities for each newspaper</p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-slate-500">
+        <div className="flex items-center gap-2 text-xs text-slate-500 flex-shrink-0">
           <span className="w-2 h-2 bg-green-500 rounded-full inline-block" />
           {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
         </div>
       </div>
 
       {/* Hawker Selector */}
-      <div className="bg-white rounded-xl border border-[hsl(220,15%,88%)] p-5 shadow-sm">
+      <div className="bg-white rounded-xl border border-[hsl(220,15%,88%)] p-4 sm:p-5 shadow-sm">
         <h3 className="text-sm font-semibold text-slate-700 mb-3">Step 1 — Select Hawker</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -173,7 +173,7 @@ export default function DailyBillingEntry() {
                 id="hawker-search"
                 type="text"
                 placeholder="Type name or ID…"
-                className="input-field pl-9"
+                className="input-field pl-9 text-base"
                 value={hawkerSearch}
                 onChange={(e) => setHawkerSearch(e.target.value)}
                 autoComplete="off"
@@ -189,7 +189,7 @@ export default function DailyBillingEntry() {
                       key={`hkr-opt-${h.id}`}
                       type="button"
                       onClick={() => handleSelectHawker(h)}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition-colors text-left"
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left min-h-[48px]"
                     >
                       <div className="w-7 h-7 rounded-lg bg-[hsl(210,67%,23%)] text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
                         {h.id}
@@ -230,7 +230,7 @@ export default function DailyBillingEntry() {
           <div>
             <label className="label-text" htmlFor="payment-type">Payment Type</label>
             <div className="relative">
-              <select id="payment-type" className="input-field appearance-none pr-8" {...register('paymentType')}>
+              <select id="payment-type" className="input-field appearance-none pr-8 text-base min-h-[44px]" {...register('paymentType')}>
                 <option value="Cash">Cash</option>
                 <option value="UPI">UPI</option>
                 <option value="Credit">Credit</option>
@@ -240,12 +240,12 @@ export default function DailyBillingEntry() {
           </div>
           <div>
             <label className="label-text" htmlFor="bill-date">Bill Date</label>
-            <input id="bill-date" type="date" className="input-field" {...register('date')} />
+            <input id="bill-date" type="date" className="input-field text-base min-h-[44px]" {...register('date')} />
           </div>
         </div>
       </div>
 
-      {/* Rate Info Banner — shown when supply and return rates differ */}
+      {/* Rate Info Banner */}
       {hasRateDifference && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex gap-2.5">
           <Info size={15} className="text-blue-500 flex-shrink-0 mt-0.5" />
@@ -258,11 +258,78 @@ export default function DailyBillingEntry() {
 
       {/* Billing Table */}
       <div className="bg-white rounded-xl border border-[hsl(220,15%,88%)] shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-[hsl(220,15%,88%)]">
+        <div className="px-4 sm:px-5 py-4 border-b border-[hsl(220,15%,88%)]">
           <h3 className="text-sm font-semibold text-slate-700">Step 2 — Enter Newspaper Quantities</h3>
           <p className="text-xs text-slate-400 mt-0.5">Net Qty and Total are auto-calculated using date-based rates</p>
         </div>
-        <div className="overflow-x-auto">
+
+        {/* Mobile card layout */}
+        <div className="block sm:hidden divide-y divide-[hsl(220,15%,93%)]">
+          {NEWSPAPERS.map((np, i) => {
+            const netQty = getNetQty(i);
+            const total = getTotal(i);
+            const hasEntry = rows[i]?.supplyQty > 0;
+            return (
+              <div key={`mob-billing-${np.name}`} className={`px-4 py-3 space-y-2 ${hasEntry ? 'bg-[hsl(210,67%,98%)]' : ''}`}>
+                <div className="flex items-center justify-between">
+                  <span className={`text-sm font-semibold ${hasEntry ? 'text-[hsl(210,67%,23%)]' : 'text-slate-700'}`}>{np.name}</span>
+                  <span className={`font-mono text-sm font-bold ${total > 0 ? 'text-slate-900' : 'text-slate-300'}`}>
+                    {total > 0 ? `₹${total.toFixed(2)}` : '—'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="text-[10px] text-slate-400 block mb-1">Supply</label>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      value={rows[i]?.supplyQty || ''}
+                      onChange={(e) => updateRow(i, 'supplyQty', e.target.value)}
+                      className="w-full text-center input-field text-sm tabular-nums min-h-[44px]"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400 block mb-1">Return</label>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      value={rows[i]?.returnQty || ''}
+                      onChange={(e) => updateRow(i, 'returnQty', e.target.value)}
+                      className="w-full text-center input-field text-sm tabular-nums min-h-[44px]"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400 block mb-1">Net / Free</label>
+                    <div className="flex items-center gap-1">
+                      <span className={`font-mono text-sm font-semibold ${netQty > 0 ? 'text-[hsl(210,67%,23%)]' : 'text-slate-300'} flex-1 text-center`}>{netQty}</span>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        value={rows[i]?.freePvc || ''}
+                        onChange={(e) => updateRow(i, 'freePvc', e.target.value)}
+                        className="w-14 text-center input-field text-xs tabular-nums min-h-[44px]"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {/* Mobile grand total */}
+          <div className="bg-[hsl(210,67%,23%)] text-white px-4 py-3 flex items-center justify-between">
+            <span className="text-sm font-semibold">Grand Total</span>
+            <span className="font-mono font-bold text-lg">₹{getTotalBill().toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+          </div>
+        </div>
+
+        {/* Desktop table layout */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-[hsl(220,15%,88%)]">
@@ -307,6 +374,7 @@ export default function DailyBillingEntry() {
                     <td className="table-cell text-center">
                       <input
                         type="number"
+                        inputMode="numeric"
                         min={0}
                         value={rows[i]?.supplyQty || ''}
                         onChange={(e) => updateRow(i, 'supplyQty', e.target.value)}
@@ -317,6 +385,7 @@ export default function DailyBillingEntry() {
                     <td className="table-cell text-center">
                       <input
                         type="number"
+                        inputMode="numeric"
                         min={0}
                         value={rows[i]?.returnQty || ''}
                         onChange={(e) => updateRow(i, 'returnQty', e.target.value)}
@@ -327,6 +396,7 @@ export default function DailyBillingEntry() {
                     <td className="table-cell text-center">
                       <input
                         type="number"
+                        inputMode="numeric"
                         min={0}
                         value={rows[i]?.freePvc || ''}
                         onChange={(e) => updateRow(i, 'freePvc', e.target.value)}
@@ -367,7 +437,7 @@ export default function DailyBillingEntry() {
       </div>
 
       {/* Actions */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white rounded-xl border border-[hsl(220,15%,88%)] p-4 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white rounded-xl border border-[hsl(220,15%,88%)] p-4 shadow-sm">
         <div className="flex items-center gap-2">
           {submitted && (
             <div className="flex items-center gap-2 text-green-700 text-sm font-semibold">
@@ -376,11 +446,11 @@ export default function DailyBillingEntry() {
             </div>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <button
             type="button"
             onClick={handleReset}
-            className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 border border-[hsl(220,15%,88%)] hover:bg-slate-50 transition-colors"
+            className="flex-1 sm:flex-none px-4 py-2.5 rounded-lg text-sm font-medium text-slate-600 border border-[hsl(220,15%,88%)] hover:bg-slate-50 transition-colors min-h-[44px]"
           >
             Reset
           </button>
@@ -388,7 +458,7 @@ export default function DailyBillingEntry() {
             type="button"
             onClick={handleSendWhatsApp}
             disabled={!selectedHawker || whatsappSending}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition-colors min-h-[44px]"
           >
             {whatsappSending ? (
               <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
@@ -400,7 +470,7 @@ export default function DailyBillingEntry() {
           <button
             type="button"
             onClick={() => window.print()}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border border-[hsl(220,15%,88%)] text-slate-600 hover:bg-slate-50 transition-colors"
+            className="hidden sm:flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold border border-[hsl(220,15%,88%)] text-slate-600 hover:bg-slate-50 transition-colors min-h-[44px]"
           >
             <Printer size={15} />
             Print
@@ -409,7 +479,7 @@ export default function DailyBillingEntry() {
             type="button"
             onClick={handleSubmit(handleFormSubmit)}
             disabled={isSubmitting || !selectedHawker}
-            className="btn-primary flex items-center gap-2"
+            className="flex-1 sm:flex-none btn-primary flex items-center justify-center gap-2 min-h-[44px]"
           >
             {isSubmitting ? (
               <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />

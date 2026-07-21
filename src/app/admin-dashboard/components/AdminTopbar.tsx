@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { RefreshCw, Bell, Search, Printer } from 'lucide-react';
+import { RefreshCw, Bell, Search, Printer, Menu } from 'lucide-react';
 import { toast } from 'sonner';
 
 const SECTION_LABELS: Record<string, string> = {
@@ -11,13 +11,18 @@ const SECTION_LABELS: Record<string, string> = {
   monthly: 'Monthly Tracker',
   reports: 'Reports & Analytics',
   settings: 'Settings',
+  rates: 'Rate Management',
+  tracker: 'Tracker',
+  groups: 'Newspaper Groups',
+  backup: 'Backup & Restore',
 };
 
 interface AdminTopbarProps {
   activeSection: string;
+  onMenuToggle?: () => void;
 }
 
-export default function AdminTopbar({ activeSection }: AdminTopbarProps) {
+export default function AdminTopbar({ activeSection, onMenuToggle }: AdminTopbarProps) {
   const [syncing, setSyncing] = useState(false);
   const [dateStr, setDateStr] = useState('');
 
@@ -28,27 +33,35 @@ export default function AdminTopbar({ activeSection }: AdminTopbarProps) {
 
   const handleSync = async () => {
     setSyncing(true);
-    // TODO: Backend — POST /api/google-sheets/sync to trigger bidirectional sync
     await new Promise((r) => setTimeout(r, 1800));
     setSyncing(false);
     toast.success('Google Sheets synced — 180 records updated successfully.');
   };
 
   const handlePrint = () => {
-    // TODO: Backend — GET /api/reports/print-preview to generate printable PDF
     toast.info('Opening print preview…');
     window.print();
   };
 
   return (
-    <header suppressHydrationWarning className="bg-white border-b border-[hsl(220,15%,88%)] px-6 py-3 flex items-center justify-between gap-4 flex-shrink-0">
-      <div>
-        <h1 className="text-lg font-semibold text-slate-900">{SECTION_LABELS[activeSection] || 'Dashboard'}</h1>
-        <p className="text-xs text-slate-400">{dateStr}</p>
+    <header suppressHydrationWarning className="bg-white border-b border-[hsl(220,15%,88%)] px-3 sm:px-6 py-3 flex items-center justify-between gap-2 sm:gap-4 flex-shrink-0">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        {/* Hamburger — mobile only */}
+        <button
+          onClick={onMenuToggle}
+          className="lg:hidden w-9 h-9 rounded-lg border border-[hsl(220,15%,88%)] flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors flex-shrink-0"
+          aria-label="Open menu"
+        >
+          <Menu size={18} />
+        </button>
+        <div className="min-w-0">
+          <h1 className="text-base sm:text-lg font-semibold text-slate-900 truncate">{SECTION_LABELS[activeSection] || 'Dashboard'}</h1>
+          <p className="text-xs text-slate-400 hidden sm:block">{dateStr}</p>
+        </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        {/* Search */}
+      <div className="flex items-center gap-1.5 sm:gap-2">
+        {/* Search — hidden on small screens */}
         <div className="hidden md:flex items-center gap-2 bg-slate-100 rounded-lg px-3 py-2 w-48 lg:w-64">
           <Search size={14} className="text-slate-400 flex-shrink-0" />
           <input
@@ -62,17 +75,17 @@ export default function AdminTopbar({ activeSection }: AdminTopbarProps) {
         <button
           onClick={handleSync}
           disabled={syncing}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-slate-600 border border-[hsl(220,15%,88%)] hover:bg-slate-50 transition-colors disabled:opacity-50"
+          className="flex items-center gap-1.5 px-2 sm:px-3 py-2 rounded-lg text-sm font-medium text-slate-600 border border-[hsl(220,15%,88%)] hover:bg-slate-50 transition-colors disabled:opacity-50"
           title="Sync with Google Sheets"
         >
           <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
-          <span className="hidden sm:inline">{syncing ? 'Syncing…' : 'Sync Sheets'}</span>
+          <span className="hidden sm:inline">{syncing ? 'Syncing…' : 'Sync'}</span>
         </button>
 
         {/* Print */}
         <button
           onClick={handlePrint}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-slate-600 border border-[hsl(220,15%,88%)] hover:bg-slate-50 transition-colors"
+          className="hidden sm:flex items-center gap-1.5 px-2 sm:px-3 py-2 rounded-lg text-sm font-medium text-slate-600 border border-[hsl(220,15%,88%)] hover:bg-slate-50 transition-colors"
           title="Print current view"
         >
           <Printer size={14} />

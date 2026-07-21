@@ -107,45 +107,45 @@ export default function HawkerRegistry() {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-start sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold text-slate-900">Hawker Registry</h2>
           <p className="text-sm text-slate-500 mt-0.5">{filtered.length} hawkers · {hawkers.filter(h => h.status === 'Active').length} active</p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-slate-600 border border-[hsl(220,15%,88%)] hover:bg-slate-50 transition-colors">
+          <button className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 border border-[hsl(220,15%,88%)] hover:bg-slate-50 transition-colors min-h-[44px]">
             <Download size={14} />
-            Export
+            <span className="hidden sm:inline">Export</span>
           </button>
           <button
             onClick={() => { setEditHawker(null); setShowModal(true); }}
-            className="btn-primary flex items-center gap-2"
+            className="btn-primary flex items-center gap-2 min-h-[44px]"
           >
             <UserPlus size={15} />
-            Add Hawker
+            <span>Add Hawker</span>
           </button>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-xs">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 sm:gap-3">
+        <div className="relative w-full sm:flex-1 sm:min-w-[200px] sm:max-w-xs">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             placeholder="Search name, ID, contact, area…"
-            className="input-field pl-9 text-sm"
+            className="input-field pl-9 text-sm w-full min-h-[44px]"
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <Filter size={13} className="text-slate-400" />
           {(['All', 'Active', 'Inactive'] as const).map((s) => (
             <button
               key={`sf-${s}`}
               onClick={() => { setStatusFilter(s); setPage(1); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+              className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors min-h-[36px] ${
                 statusFilter === s
                   ? 'bg-[hsl(210,67%,23%)] text-white'
                   : 'bg-white border border-[hsl(220,15%,88%)] text-slate-600 hover:bg-slate-50'
@@ -155,12 +155,12 @@ export default function HawkerRegistry() {
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
           {(['All', 'Cash', 'UPI', 'Credit'] as const).map((p) => (
             <button
               key={`pf-${p}`}
               onClick={() => { setPaymentFilter(p); setPage(1); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+              className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors min-h-[36px] ${
                 paymentFilter === p
                   ? 'bg-[hsl(36,80%,52%)] text-white'
                   : 'bg-white border border-[hsl(220,15%,88%)] text-slate-600 hover:bg-slate-50'
@@ -176,7 +176,7 @@ export default function HawkerRegistry() {
       <div className="bg-white rounded-xl border border-[hsl(220,15%,88%)] shadow-sm overflow-hidden">
         {/* Bulk action bar */}
         {selectedRows.size > 0 && (
-          <div className="flex items-center justify-between px-5 py-3 bg-[hsl(210,67%,23%)] text-white animate-slide-up">
+          <div className="flex items-center justify-between px-4 sm:px-5 py-3 bg-[hsl(210,67%,23%)] text-white animate-slide-up">
             <span className="text-sm font-semibold">{selectedRows.size} hawker{selectedRows.size > 1 ? 's' : ''} selected</span>
             <div className="flex items-center gap-3">
               <button
@@ -193,7 +193,69 @@ export default function HawkerRegistry() {
           </div>
         )}
 
-        <div className="overflow-x-auto">
+        {/* Mobile card list */}
+        <div className="block sm:hidden divide-y divide-[hsl(220,15%,93%)]">
+          {paginated.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-16">
+              <Search size={32} className="text-slate-200" />
+              <p className="text-slate-400 font-medium">No hawkers match your filters</p>
+            </div>
+          ) : (
+            paginated.map((h) => (
+              <div
+                key={`mob-hkr-${h.id}`}
+                className={`px-4 py-3 space-y-2 ${selectedRows.has(h.id) ? 'bg-[hsl(210,67%,98%)]' : ''}`}
+              >
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedRows.has(h.id)}
+                    onChange={() => toggleRow(h.id)}
+                    className="w-4 h-4 rounded border-slate-300 accent-[hsl(210,67%,23%)] flex-shrink-0"
+                  />
+                  <div className="w-8 h-8 rounded-lg bg-[hsl(210,67%,23%)] text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
+                    {h.name.charAt(0)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-slate-800 text-sm truncate">{h.name}</p>
+                    <p className="text-xs text-slate-400 font-mono">#{String(h.id).padStart(2, '0')}</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => { setEditHawker(h); setShowModal(true); }}
+                      className="w-8 h-8 rounded-lg hover:bg-blue-50 flex items-center justify-center text-slate-400 hover:text-blue-600 transition-colors"
+                    >
+                      <Edit2 size={14} />
+                    </button>
+                    {deleteConfirm === h.id ? (
+                      <>
+                        <button onClick={() => handleDelete(h.id)} className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center text-red-600">
+                          <Trash2 size={14} />
+                        </button>
+                        <button onClick={() => setDeleteConfirm(null)} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400">
+                          <X size={14} />
+                        </button>
+                      </>
+                    ) : (
+                      <button onClick={() => setDeleteConfirm(h.id)} className="w-8 h-8 rounded-lg hover:bg-red-50 flex items-center justify-center text-slate-400 hover:text-red-600">
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap pl-11">
+                  <span className="flex items-center gap-1 text-xs text-slate-500"><Phone size={11} className="text-slate-400" />{h.contact}</span>
+                  <span className="flex items-center gap-1 text-xs text-slate-500"><MapPin size={11} className="text-slate-400" />{h.area}</span>
+                  <span className={`status-badge ${h.paymentType === 'Cash' ? 'bg-blue-50 text-blue-700' : h.paymentType === 'UPI' ? 'bg-purple-50 text-purple-700' : 'bg-orange-50 text-orange-700'}`}>{h.paymentType}</span>
+                  <span className={`status-badge ${h.status === 'Active' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{h.status}</span>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Desktop table */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-[hsl(220,15%,88%)]">
@@ -336,7 +398,7 @@ export default function HawkerRegistry() {
         </div>
 
         {/* Pagination */}
-        <div className="px-5 py-3 bg-slate-50 border-t border-[hsl(220,15%,88%)] flex items-center justify-between">
+        <div className="px-4 sm:px-5 py-3 bg-slate-50 border-t border-[hsl(220,15%,88%)] flex items-center justify-between">
           <p className="text-xs text-slate-500">{filtered.length} hawkers · Showing {Math.min((page - 1) * perPage + 1, filtered.length)}–{Math.min(page * perPage, filtered.length)}</p>
           <div className="flex items-center gap-1">
             <button

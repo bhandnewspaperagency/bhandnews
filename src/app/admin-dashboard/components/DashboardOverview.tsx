@@ -111,23 +111,24 @@ export default function DashboardOverview({ onNavigate }: DashboardOverviewProps
   ];
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-4 gap-4">
+    <div className="space-y-4 sm:space-y-6 animate-fade-in">
+      {/* KPI Cards — 2 cols on mobile, 3 on sm, 4 on lg */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
         {kpiCards.map((card) => (
           <div
             key={`kpi-${card.id}`}
-            className={`kpi-card ${card.span} ${card.hero ? 'border-l-4 border-l-[hsl(210,67%,23%)]' : ''}`}
+            className={`kpi-card ${card.hero ? 'col-span-2 sm:col-span-3 lg:col-span-2 border-l-4 border-l-[hsl(210,67%,23%)]' : ''}`}
           >
-            <div className="flex items-start justify-between mb-3">
-              <div className={`w-10 h-10 rounded-xl ${card.bg} ${card.color} flex items-center justify-center`}>
+            <div className="flex items-start justify-between mb-2 sm:mb-3">
+              <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl ${card.bg} ${card.color} flex items-center justify-center`}>
                 {card.icon}
               </div>
-              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${card.trendUp ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+              <span className={`text-[10px] sm:text-xs font-medium px-1.5 sm:px-2 py-0.5 rounded-full truncate max-w-[90px] sm:max-w-none ${card.trendUp ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
                 {card.trend}
               </span>
             </div>
-            <p className="card-label mb-1">{card.label}</p>
-            <p className={`tabular-nums font-bold ${card.hero ? 'text-4xl' : 'text-2xl'} text-slate-900`}>
+            <p className="card-label mb-1 text-xs sm:text-sm">{card.label}</p>
+            <p className={`tabular-nums font-bold ${card.hero ? 'text-2xl sm:text-4xl' : 'text-xl sm:text-2xl'} text-slate-900`}>
               {card.value}
             </p>
             <p className="text-xs text-slate-400 mt-1">{card.sub}</p>
@@ -136,8 +137,8 @@ export default function DashboardOverview({ onNavigate }: DashboardOverviewProps
       </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 bg-white rounded-xl border border-[hsl(220,15%,88%)] p-5 shadow-sm">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 bg-white rounded-xl border border-[hsl(220,15%,88%)] p-4 sm:p-5 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="section-title">Monthly Billing Trend</h3>
@@ -146,7 +147,7 @@ export default function DashboardOverview({ onNavigate }: DashboardOverviewProps
           </div>
           <MonthlyTrendChart />
         </div>
-        <div className="bg-white rounded-xl border border-[hsl(220,15%,88%)] p-5 shadow-sm">
+        <div className="bg-white rounded-xl border border-[hsl(220,15%,88%)] p-4 sm:p-5 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="section-title">Top Newspapers</h3>
@@ -159,7 +160,7 @@ export default function DashboardOverview({ onNavigate }: DashboardOverviewProps
 
       {/* Recent Billing Activity */}
       <div className="bg-white rounded-xl border border-[hsl(220,15%,88%)] shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[hsl(220,15%,88%)]">
+        <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b border-[hsl(220,15%,88%)]">
           <h3 className="section-title">Today&apos;s Billing Activity</h3>
           <button
             onClick={() => onNavigate('billing')}
@@ -168,7 +169,53 @@ export default function DashboardOverview({ onNavigate }: DashboardOverviewProps
             Add Entry <ArrowRight size={12} />
           </button>
         </div>
-        <div className="overflow-x-auto">
+
+        {/* Mobile card view */}
+        <div className="block sm:hidden divide-y divide-[hsl(220,15%,93%)]">
+          {todayBills.length === 0 ? (
+            <p className="text-center py-10 text-slate-400 text-sm">No billing entries for today yet.</p>
+          ) : (
+            todayBills.map((bill) => {
+              const hawker = allHawkers.find((h) => h.id === bill.hawkerId);
+              return (
+                <div key={`mob-bill-${bill.id}`} className="px-4 py-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-[hsl(210,67%,23%)] text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
+                        {bill.hawkerId}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">{bill.hawkerName}</p>
+                        <p className="text-xs text-slate-400">{hawker?.area || '—'}</p>
+                      </div>
+                    </div>
+                    <p className="font-bold tabular-nums text-slate-900">₹{bill.totalBill.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`status-badge ${
+                      bill.paymentType === 'Cash' ? 'bg-blue-50 text-blue-700' :
+                      bill.paymentType === 'UPI' ? 'bg-purple-50 text-purple-700' : 'bg-orange-50 text-orange-700'
+                    }`}>{bill.paymentType}</span>
+                    <span className={`status-badge ${
+                      bill.paymentStatus === 'Paid' ? 'bg-green-50 text-green-700' :
+                      bill.paymentStatus === 'Partial' ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700'
+                    }`}>{bill.paymentStatus}</span>
+                    <span className="flex items-center gap-1 text-xs text-slate-500">
+                      {bill.whatsappSent ? (
+                        <><CheckCircle2 size={12} className="text-green-600" /> Sent</>
+                      ) : (
+                        <><Clock size={12} className="text-amber-500" /> Pending</>
+                      )}
+                    </span>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Desktop table view */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-[hsl(220,15%,88%)]">
@@ -238,7 +285,8 @@ export default function DashboardOverview({ onNavigate }: DashboardOverviewProps
             </tbody>
           </table>
         </div>
-        <div className="px-5 py-3 bg-slate-50 border-t border-[hsl(220,15%,88%)] flex items-center justify-between">
+
+        <div className="px-4 sm:px-5 py-3 bg-slate-50 border-t border-[hsl(220,15%,88%)] flex items-center justify-between">
           <p className="text-xs text-slate-500">{todayBills.length} entries today · {pendingHawkers} hawkers pending</p>
           <button
             onClick={() => onNavigate('hawkers')}

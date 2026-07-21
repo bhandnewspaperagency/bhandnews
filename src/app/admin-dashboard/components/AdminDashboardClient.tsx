@@ -15,6 +15,7 @@ import BackupRestore from './BackupRestore';
 
 export default function AdminDashboardClient() {
   const [activeSection, setActiveSection] = useState('dashboard');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   const renderContent = () => {
     switch (activeSection) {
@@ -31,13 +32,35 @@ export default function AdminDashboardClient() {
     }
   };
 
+  const handleSectionChange = (section: string) => {
+    setActiveSection(section);
+    setMobileSidebarOpen(false);
+  };
+
   return (
     <div className="flex h-screen overflow-hidden bg-[hsl(220,20%,97%)]">
-      <AdminSidebar activeSection={activeSection} onSectionChange={setActiveSection} />
+      {/* Mobile sidebar overlay */}
+      {mobileSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 z-30 lg:hidden"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar — hidden on mobile unless open */}
+      <div className={`fixed lg:static inset-y-0 left-0 z-40 lg:z-auto transition-transform duration-300 ease-in-out ${
+        mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+      }`}>
+        <AdminSidebar activeSection={activeSection} onSectionChange={handleSectionChange} />
+      </div>
+
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <AdminTopbar activeSection={activeSection} />
+        <AdminTopbar
+          activeSection={activeSection}
+          onMenuToggle={() => setMobileSidebarOpen((v) => !v)}
+        />
         <main className="flex-1 overflow-y-auto scrollbar-thin">
-          <div className="max-w-screen-2xl mx-auto px-6 py-6 xl:px-8 2xl:px-10">
+          <div className="max-w-screen-2xl mx-auto px-3 py-4 sm:px-6 sm:py-6 xl:px-8 2xl:px-10">
             {renderContent()}
           </div>
         </main>
