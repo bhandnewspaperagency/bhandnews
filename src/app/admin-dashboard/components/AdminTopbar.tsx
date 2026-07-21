@@ -22,7 +22,7 @@ export default function AdminTopbar({ activeSection }: AdminTopbarProps) {
   const [dateStr, setDateStr] = useState('');
 
   useEffect(() => {
-    const d = new Date(2026, 3, 23);
+    const d = new Date();
     setDateStr(d.toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }));
   }, []);
 
