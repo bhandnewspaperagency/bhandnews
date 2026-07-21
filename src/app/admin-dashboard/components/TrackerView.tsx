@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Download, FileText, Search, TrendingUp, Users, Newspaper,  } from 'lucide-react';
-import { getBillingRecords, getMonthlyTracker, getHawkers, NEWSPAPERS } from '@/lib/storage';
-import type { DailyBillingRecord, MonthlyTrackerRow, Hawker } from '@/lib/storage';
+import { Download, FileText, Search, TrendingUp, Users, Newspaper, Layers } from 'lucide-react';
+import { getBillingRecords, getMonthlyTracker, getHawkers, NEWSPAPERS, getNewspaperGroups } from '@/lib/storage';
+import type { DailyBillingRecord, MonthlyTrackerRow, Hawker, NewspaperGroup } from '@/lib/storage';
 
 type ViewMode = 'daily' | 'fullday' | 'monthly';
 
@@ -74,15 +74,38 @@ export default function TrackerView() {
   });
   const [rangeTo, setRangeTo] = useState(() => new Date().toISOString().split('T')[0]);
   const [search, setSearch] = useState('');
+  const [selectedGroupId, setSelectedGroupId] = useState<string>('all');
   const [billingRecords, setBillingRecords] = useState<DailyBillingRecord[]>([]);
   const [monthlyData, setMonthlyData] = useState<MonthlyTrackerRow[]>([]);
   const [hawkers, setHawkers] = useState<Hawker[]>([]);
+  const [groups, setGroups] = useState<NewspaperGroup[]>([]);
 
   useEffect(() => {
     setBillingRecords(getBillingRecords());
     setMonthlyData(getMonthlyTracker());
     setHawkers(getHawkers());
+    setGroups(getNewspaperGroups());
   }, []);
+
+  // ─── Active newspapers based on selected group ──────────────────────────────
+  const activeNPs = useMemo(() => {
+    if (selectedGroupId === 'all') return NEWSPAPERS;
+    const group = groups.find((g) => g.id === selectedGroupId);
+    if (!group || group.newspapers.length === 0) return NEWSPAPERS;
+    return NEWSPAPERS.filter((np) => group.newspapers.includes(np.name));
+  }, [selectedGroupId, groups]);
+
+  const activeGroupColor = useMemo(() => {
+    if (selectedGroupId === 'all') return undefined;
+    return groups.find((g) => g.id === selectedGroupId)?.color;
+  }, [selectedGroupId, groups]);
+
+  // ─── Filter billing entries by active newspapers ────────────────────────────
+  const filterEntriesByGroup = (entries: DailyBillingRecord['entries']) => {
+    if (selectedGroupId === 'all') return entries;
+    const npSet = new Set(activeNPs.map((n) => n.name));
+    return entries.filter((e) => npSet.has(e.newspaper));
+  };
 
   // ─── Daily View Data ────────────────────────────────────────────────────────
   const dailyRows = useMemo<DailySummaryRow[]>(() => {
@@ -94,8 +117,9 @@ export default function TrackerView() {
           String(r.hawkerId).includes(search)
       )
       .map((r) => {
+        const filteredEntries = filterEntriesByGroup(r.entries);
         const newspapers: DailySummaryRow['newspapers'] = {};
-        for (const e of r.entries) {
+        for (const e of filteredEntries) {
           newspapers[e.newspaper] = {
             supply: e.supplyQty,
             return: e.returnQty,
@@ -103,30 +127,34 @@ export default function TrackerView() {
             total: e.total,
           };
         }
+        const totalBill = filteredEntries.reduce((s, e) => s + e.total, 0);
         return {
           hawkerId: r.hawkerId,
           hawkerName: r.hawkerName,
           newspapers,
-          totalBill: r.totalBill,
+          totalBill,
           paymentStatus: r.paymentStatus,
           paymentType: r.paymentType,
         };
-      });
-  }, [billingRecords, selectedDate, search]);
+      })
+      .filter((r) => selectedGroupId === 'all' || r.totalBill > 0);
+  }, [billingRecords, selectedDate, search, selectedGroupId, activeNPs]);
 
   // ─── Full Day (Date Range) View Data ────────────────────────────────────────
   const fullDayRows = useMemo(() => {
     const records = billingRecords.filter((b) => b.date >= rangeFrom && b.date <= rangeTo);
-    // Group by hawker
     const map = new Map<number, { hawkerName: string; totalBill: number; days: Set<string>; newspapers: Record<string, number> }>();
     for (const r of records) {
+      const filteredEntries = filterEntriesByGroup(r.entries);
+      if (selectedGroupId !== 'all' && filteredEntries.length === 0) continue;
       if (!map.has(r.hawkerId)) {
         map.set(r.hawkerId, { hawkerName: r.hawkerName, totalBill: 0, days: new Set(), newspapers: {} });
       }
       const row = map.get(r.hawkerId)!;
-      row.totalBill += r.totalBill;
+      const entryTotal = filteredEntries.reduce((s, e) => s + e.total, 0);
+      row.totalBill += entryTotal;
       row.days.add(r.date);
-      for (const e of r.entries) {
+      for (const e of filteredEntries) {
         row.newspapers[e.newspaper] = (row.newspapers[e.newspaper] || 0) + e.total;
       }
     }
@@ -138,7 +166,7 @@ export default function TrackerView() {
           String(r.hawkerId).includes(search)
       )
       .sort((a, b) => a.hawkerId - b.hawkerId);
-  }, [billingRecords, rangeFrom, rangeTo, search]);
+  }, [billingRecords, rangeFrom, rangeTo, search, selectedGroupId, activeNPs]);
 
   // ─── Monthly View Data ──────────────────────────────────────────────────────
   const monthlyRows = useMemo(() => {
@@ -147,12 +175,15 @@ export default function TrackerView() {
     const records = billingRecords.filter((b) => b.date.startsWith(prefix));
     const map = new Map<number, { hawkerName: string; totalBill: number; newspapers: Record<string, number> }>();
     for (const r of records) {
+      const filteredEntries = filterEntriesByGroup(r.entries);
+      if (selectedGroupId !== 'all' && filteredEntries.length === 0) continue;
       if (!map.has(r.hawkerId)) {
         map.set(r.hawkerId, { hawkerName: r.hawkerName, totalBill: 0, newspapers: {} });
       }
       const row = map.get(r.hawkerId)!;
-      row.totalBill += r.totalBill;
-      for (const e of r.entries) {
+      const entryTotal = filteredEntries.reduce((s, e) => s + e.total, 0);
+      row.totalBill += entryTotal;
+      for (const e of filteredEntries) {
         row.newspapers[e.newspaper] = (row.newspapers[e.newspaper] || 0) + e.total;
       }
     }
@@ -164,7 +195,7 @@ export default function TrackerView() {
           String(r.hawkerId).includes(search)
       )
       .sort((a, b) => a.hawkerId - b.hawkerId);
-  }, [billingRecords, selectedMonth, search]);
+  }, [billingRecords, selectedMonth, search, selectedGroupId, activeNPs]);
 
   // ─── Summary Stats ──────────────────────────────────────────────────────────
   const stats = useMemo(() => {
@@ -183,7 +214,7 @@ export default function TrackerView() {
 
   // ─── Download Handlers ──────────────────────────────────────────────────────
   const handleDownloadCSV = () => {
-    const visibleNPs = NEWSPAPERS.slice(0, 8).map((n) => n.name);
+    const visibleNPs = activeNPs.slice(0, 8).map((n) => n.name);
     if (viewMode === 'daily') {
       const header = ['#', 'Hawker', ...visibleNPs, 'Total Bill', 'Payment'];
       const rows = dailyRows.map((r) => [
@@ -217,7 +248,7 @@ export default function TrackerView() {
   };
 
   const handlePrint = () => {
-    const visibleNPs = NEWSPAPERS.slice(0, 8).map((n) => n.name);
+    const visibleNPs = activeNPs.slice(0, 8).map((n) => n.name);
     let title = '';
     let tableHtml = '';
 
@@ -260,7 +291,7 @@ export default function TrackerView() {
     printTable(title, tableHtml);
   };
 
-  const visibleNPs = NEWSPAPERS.slice(0, 8);
+  const visibleNPs = activeNPs.slice(0, 8);
 
   // ─── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -306,7 +337,7 @@ export default function TrackerView() {
         ))}
       </div>
 
-      {/* Date Controls */}
+      {/* Date Controls + Group Filter */}
       <div className="bg-white rounded-xl border border-[hsl(220,15%,88%)] p-4 shadow-sm">
         <div className="flex flex-wrap items-end gap-4">
           {viewMode === 'daily' && (
@@ -354,6 +385,48 @@ export default function TrackerView() {
               />
             </div>
           )}
+
+          {/* Group Filter */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wide">
+              <span className="flex items-center gap-1"><Layers size={11} /> Newspaper Group</span>
+            </label>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => setSelectedGroupId('all')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                  selectedGroupId === 'all' ?'bg-[hsl(210,67%,23%)] text-white border-[hsl(210,67%,23%)]' :'text-slate-600 border-[hsl(220,15%,88%)] hover:bg-slate-50'
+                }`}
+              >
+                All Newspapers
+              </button>
+              {groups.map((g) => (
+                <button
+                  key={g.id}
+                  onClick={() => setSelectedGroupId(g.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all flex items-center gap-1.5 ${
+                    selectedGroupId === g.id
+                      ? 'text-white border-transparent' :'text-slate-600 border-[hsl(220,15%,88%)] hover:bg-slate-50'
+                  }`}
+                  style={
+                    selectedGroupId === g.id
+                      ? { backgroundColor: g.color ?? 'hsl(210,67%,23%)', borderColor: g.color ?? 'hsl(210,67%,23%)' }
+                      : {}
+                  }
+                >
+                  <span
+                    className="w-2 h-2 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: selectedGroupId === g.id ? 'rgba(255,255,255,0.7)' : (g.color ?? 'hsl(210,67%,23%)') }}
+                  />
+                  {g.name}
+                </button>
+              ))}
+              {groups.length === 0 && (
+                <span className="text-xs text-slate-400 italic">No groups — create them in Newspaper Groups</span>
+              )}
+            </div>
+          </div>
+
           <div className="flex-1 min-w-[200px]">
             <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wide">Search Hawker</label>
             <div className="relative">
@@ -368,6 +441,21 @@ export default function TrackerView() {
             </div>
           </div>
         </div>
+
+        {/* Active group indicator */}
+        {selectedGroupId !== 'all' && (
+          <div
+            className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium"
+            style={{
+              backgroundColor: activeGroupColor ? `${activeGroupColor}15` : 'hsl(210,67%,97%)',
+              color: activeGroupColor ?? 'hsl(210,67%,23%)',
+              border: `1px solid ${activeGroupColor ? `${activeGroupColor}30` : 'hsl(210,67%,88%)'}`,
+            }}
+          >
+            <Layers size={12} />
+            Showing: {groups.find((g) => g.id === selectedGroupId)?.name} — {activeNPs.length} newspaper{activeNPs.length !== 1 ? 's' : ''}: {activeNPs.map((n) => n.name).join(', ')}
+          </div>
+        )}
       </div>
 
       {/* Stats Cards */}
@@ -605,6 +693,7 @@ export default function TrackerView() {
             {viewMode === 'daily' && `${dailyRows.length} hawker${dailyRows.length !== 1 ? 's' : ''} · ${formatDate(selectedDate)}`}
             {viewMode === 'fullday' && `${fullDayRows.length} hawker${fullDayRows.length !== 1 ? 's' : ''} · ${formatDate(rangeFrom)} – ${formatDate(rangeTo)}`}
             {viewMode === 'monthly' && `${monthlyRows.length} hawker${monthlyRows.length !== 1 ? 's' : ''} · ${selectedMonth}`}
+            {selectedGroupId !== 'all' && ` · ${groups.find((g) => g.id === selectedGroupId)?.name}`}
           </p>
           <div className="flex items-center gap-2">
             <button onClick={handleDownloadCSV} className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1 transition-colors">

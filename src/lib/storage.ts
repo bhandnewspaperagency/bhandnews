@@ -23,6 +23,7 @@ const KEYS = {
   AUTH: 'bhand_auth_session',
   SEEDED: 'bhand_seeded_v1',
   RATES: 'bhand_newspaper_rates',
+  GROUPS: 'bhand_newspaper_groups',
 };
 
 function isBrowser() {
@@ -284,4 +285,37 @@ export function deleteRatesForDate(date: string): void {
 export function getRatesForDate(date: string): NewspaperRateEntry[] | null {
   const record = getAllRates().find((r) => r.date === date);
   return record?.rates ?? null;
+}
+
+// ─── Newspaper Groups ─────────────────────────────────────────────────────────
+
+export interface NewspaperGroup {
+  id: string;
+  name: string;
+  newspapers: string[]; // list of newspaper names
+  color?: string; // optional color tag
+}
+
+export function getNewspaperGroups(): NewspaperGroup[] {
+  return read<NewspaperGroup[]>(KEYS.GROUPS) ?? [];
+}
+
+export function saveNewspaperGroup(group: NewspaperGroup): NewspaperGroup {
+  const list = getNewspaperGroups();
+  const idx = list.findIndex((g) => g.id === group.id);
+  if (idx >= 0) {
+    list[idx] = group;
+  } else {
+    const newGroup = { ...group, id: group.id || `grp-${Date.now()}` };
+    list.push(newGroup);
+    write(KEYS.GROUPS, list);
+    return newGroup;
+  }
+  write(KEYS.GROUPS, list);
+  return group;
+}
+
+export function deleteNewspaperGroup(id: string): void {
+  const list = getNewspaperGroups().filter((g) => g.id !== id);
+  write(KEYS.GROUPS, list);
 }
