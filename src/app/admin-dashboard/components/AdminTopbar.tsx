@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { RefreshCw, Bell, Search, Printer, Menu } from 'lucide-react';
+import { RefreshCw, Bell, Search, Printer, Menu, Wifi, WifiOff, CloudUpload } from 'lucide-react';
 import { toast } from 'sonner';
 import { getHawkers, getBillingRecords } from '@/lib/storage';
 
@@ -23,21 +23,72 @@ interface AdminTopbarProps {
   onMenuToggle?: () => void;
 }
 
+type ConnectionState = 'online' | 'offline' | 'syncing';
+
+function ConnectionBadge({ state }: { state: ConnectionState }) {
+  if (state === 'offline') {
+    return (
+      <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-50 border border-red-200 text-red-600 text-xs font-medium flex-shrink-0">
+        <WifiOff size={12} />
+        <span className="hidden sm:inline">Offline</span>
+      </div>
+    );
+  }
+  if (state === 'syncing') {
+    return (
+      <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-600 text-xs font-medium flex-shrink-0">
+        <CloudUpload size={12} className="animate-pulse" />
+        <span className="hidden sm:inline">Syncing</span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-green-50 border border-green-200 text-green-600 text-xs font-medium flex-shrink-0">
+      <Wifi size={12} />
+      <span className="hidden sm:inline">Online</span>
+    </div>
+  );
+}
+
 export default function AdminTopbar({ activeSection, onMenuToggle }: AdminTopbarProps) {
   const [syncing, setSyncing] = useState(false);
   const [dateStr, setDateStr] = useState('');
+  const [connectionState, setConnectionState] = useState<ConnectionState>('online');
 
   useEffect(() => {
     const d = new Date();
     setDateStr(d.toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }));
   }, []);
 
+  useEffect(() => {
+    // Set initial state
+    setConnectionState(navigator.onLine ? 'online' : 'offline');
+
+    const handleOnline = () => {
+      setConnectionState('online');
+      toast.success('Back online — data will sync automatically.');
+    };
+    const handleOffline = () => {
+      setConnectionState('offline');
+      toast.warning('You are offline — changes saved locally.');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   const handleSync = async () => {
     setSyncing(true);
+    setConnectionState('syncing');
     await new Promise((r) => setTimeout(r, 800));
     const hawkers = getHawkers();
     const billing = getBillingRecords();
     setSyncing(false);
+    setConnectionState(navigator.onLine ? 'online' : 'offline');
     toast.success(`Data synced — ${hawkers.length} hawkers · ${billing.length} billing records loaded from local storage.`);
   };
 
@@ -64,6 +115,9 @@ export default function AdminTopbar({ activeSection, onMenuToggle }: AdminTopbar
       </div>
 
       <div className="flex items-center gap-1.5 sm:gap-2">
+        {/* Connection State Badge */}
+        <ConnectionBadge state={syncing ? 'syncing' : connectionState} />
+
         {/* Search — hidden on small screens */}
         <div className="hidden md:flex items-center gap-2 bg-slate-100 rounded-lg px-3 py-2 w-48 lg:w-64">
           <Search size={14} className="text-slate-400 flex-shrink-0" />
