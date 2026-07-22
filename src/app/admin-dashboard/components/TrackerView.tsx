@@ -7,6 +7,9 @@ import type { DailyBillingRecord, MonthlyTrackerRow, Hawker, NewspaperGroup } fr
 
 type ViewMode = 'daily' | 'fullday' | 'monthly';
 
+// Lokmat = first 3 newspapers (indices 0,1,2) — paid directly to company
+const LOKMAT_COUNT = 3;
+
 interface DailySummaryRow {
   hawkerId: number;
   hawkerName: string;
@@ -208,16 +211,25 @@ export default function TrackerView() {
   const stats = useMemo(() => {
     if (viewMode === 'daily') {
       const total = dailyRows.reduce((s, r) => s + r.totalBill, 0);
-      return { hawkers: dailyRows.length, total, label: `Date: ${formatDate(selectedDate)}` };
+      const lokmats = activeNPs.slice(0, LOKMAT_COUNT).map((n) => n.name);
+      const transferToCompany = dailyRows.reduce((s, r) => s + lokmats.reduce((ls, np) => ls + (r.newspapers[np]?.total ?? 0), 0), 0);
+      const cash = total - transferToCompany;
+      return { hawkers: dailyRows.length, total, transferToCompany, cash, label: `Date: ${formatDate(selectedDate)}` };
     }
     if (viewMode === 'fullday') {
       const total = fullDayRows.reduce((s, r) => s + r.totalBill, 0);
-      return { hawkers: fullDayRows.length, total, label: `${formatDate(rangeFrom)} – ${formatDate(rangeTo)}` };
+      const lokmats = activeNPs.slice(0, LOKMAT_COUNT).map((n) => n.name);
+      const transferToCompany = fullDayRows.reduce((s, r) => s + lokmats.reduce((ls, np) => ls + (r.newspapers[np] ?? 0), 0), 0);
+      const cash = total - transferToCompany;
+      return { hawkers: fullDayRows.length, total, transferToCompany, cash, label: `${formatDate(rangeFrom)} – ${formatDate(rangeTo)}` };
     }
     const total = monthlyRows.reduce((s, r) => s + r.totalBill, 0);
+    const lokmats = activeNPs.slice(0, LOKMAT_COUNT).map((n) => n.name);
+    const transferToCompany = monthlyRows.reduce((s, r) => s + lokmats.reduce((ls, np) => ls + (r.newspapers[np] ?? 0), 0), 0);
+    const cash = total - transferToCompany;
     const [y, m] = selectedMonth.split('-').map(Number);
-    return { hawkers: monthlyRows.length, total, label: `${getMonthName(m - 1)} ${y}` };
-  }, [viewMode, dailyRows, fullDayRows, monthlyRows, selectedDate, rangeFrom, rangeTo, selectedMonth]);
+    return { hawkers: monthlyRows.length, total, transferToCompany, cash, label: `${getMonthName(m - 1)} ${y}` };
+  }, [viewMode, dailyRows, fullDayRows, monthlyRows, selectedDate, rangeFrom, rangeTo, selectedMonth, activeNPs]);
 
   // ─── Download Handlers ──────────────────────────────────────────────────────
   const handleDownloadCSV = () => {
@@ -495,6 +507,27 @@ export default function TrackerView() {
           </p>
           <p className="text-xs text-slate-400 mt-0.5">{stats.label}</p>
         </div>
+        {/* Payment bifurcation cards */}
+        <div className="bg-indigo-50 rounded-xl border border-indigo-200 p-4 shadow-sm">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="inline-block w-2.5 h-2.5 rounded-full bg-indigo-500 flex-shrink-0"></span>
+            <span className="text-xs font-semibold text-indigo-600 uppercase tracking-wide">Transfer to Company</span>
+          </div>
+          <p className="text-2xl font-bold text-indigo-800">
+            ₹{stats.transferToCompany.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+          </p>
+          <p className="text-[10px] text-indigo-400 mt-0.5">Lokmat newspapers</p>
+        </div>
+        <div className="bg-emerald-50 rounded-xl border border-emerald-200 p-4 shadow-sm">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 flex-shrink-0"></span>
+            <span className="text-xs font-semibold text-emerald-600 uppercase tracking-wide">Cash</span>
+          </div>
+          <p className="text-2xl font-bold text-emerald-800">
+            ₹{stats.cash.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+          </p>
+          <p className="text-[10px] text-emerald-400 mt-0.5">Other newspapers</p>
+        </div>
       </div>
 
       {/* Table */}
@@ -563,6 +596,54 @@ export default function TrackerView() {
                     </td>
                     <td className="px-4 py-3"></td>
                   </tr>
+                  {/* Transfer to Company row */}
+                  <tr className="bg-indigo-50 border-t border-indigo-200">
+                    <td className="px-4 py-2.5 sticky left-0 bg-indigo-50 z-10"></td>
+                    <td className="px-4 py-2.5 sticky left-10 bg-indigo-50 z-10">
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-block w-2 h-2 rounded-full bg-indigo-500 flex-shrink-0"></span>
+                        <span className="text-xs font-semibold text-indigo-700">Transfer to Company</span>
+                        <span className="text-[10px] text-indigo-400 bg-indigo-100 border border-indigo-200 px-1.5 py-0.5 rounded-full hidden sm:inline">Lokmat</span>
+                      </div>
+                    </td>
+                    {visibleNPs.map((np, idx) => {
+                      const isLokmat = idx < LOKMAT_COUNT;
+                      const t = isLokmat ? dailyRows.reduce((s, r) => s + (r.newspapers[np.name]?.total ?? 0), 0) : 0;
+                      return (
+                        <td key={`dft-tc-${np.name}`} className="px-4 py-2.5 text-right tabular-nums text-xs text-indigo-600">
+                          {isLokmat && t > 0 ? `₹${t.toFixed(0)}` : <span className="text-slate-200">—</span>}
+                        </td>
+                      );
+                    })}
+                    <td className="px-4 py-2.5 text-right tabular-nums font-bold text-indigo-800">
+                      ₹{stats.transferToCompany.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-4 py-2.5"></td>
+                  </tr>
+                  {/* Cash row */}
+                  <tr className="bg-emerald-50 border-t border-emerald-200">
+                    <td className="px-4 py-2.5 sticky left-0 bg-emerald-50 z-10"></td>
+                    <td className="px-4 py-2.5 sticky left-10 bg-emerald-50 z-10">
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0"></span>
+                        <span className="text-xs font-semibold text-emerald-700">Cash</span>
+                        <span className="text-[10px] text-emerald-400 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded-full hidden sm:inline">Other</span>
+                      </div>
+                    </td>
+                    {visibleNPs.map((np, idx) => {
+                      const isOther = idx >= LOKMAT_COUNT;
+                      const t = isOther ? dailyRows.reduce((s, r) => s + (r.newspapers[np.name]?.total ?? 0), 0) : 0;
+                      return (
+                        <td key={`dft-cash-${np.name}`} className="px-4 py-2.5 text-right tabular-nums text-xs text-emerald-600">
+                          {isOther && t > 0 ? `₹${t.toFixed(0)}` : <span className="text-slate-200">—</span>}
+                        </td>
+                      );
+                    })}
+                    <td className="px-4 py-2.5 text-right tabular-nums font-bold text-emerald-800">
+                      ₹{stats.cash.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-4 py-2.5"></td>
+                  </tr>
                 </tfoot>
               )}
             </table>
@@ -628,6 +709,54 @@ export default function TrackerView() {
                       ₹{fullDayRows.reduce((s, r) => s + r.totalBill, 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </td>
                   </tr>
+                  {/* Transfer to Company row */}
+                  <tr className="bg-indigo-50 border-t border-indigo-200">
+                    <td className="px-4 py-2.5 sticky left-0 bg-indigo-50 z-10"></td>
+                    <td className="px-4 py-2.5 sticky left-10 bg-indigo-50 z-10">
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-block w-2 h-2 rounded-full bg-indigo-500 flex-shrink-0"></span>
+                        <span className="text-xs font-semibold text-indigo-700">Transfer to Company</span>
+                        <span className="text-[10px] text-indigo-400 bg-indigo-100 border border-indigo-200 px-1.5 py-0.5 rounded-full hidden sm:inline">Lokmat</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2.5"></td>
+                    {visibleNPs.map((np, idx) => {
+                      const isLokmat = idx < LOKMAT_COUNT;
+                      const t = isLokmat ? fullDayRows.reduce((s, r) => s + (r.newspapers[np.name] ?? 0), 0) : 0;
+                      return (
+                        <td key={`fdft-tc-${np.name}`} className="px-4 py-2.5 text-right tabular-nums text-xs text-indigo-600">
+                          {isLokmat && t > 0 ? `₹${t.toFixed(0)}` : <span className="text-slate-200">—</span>}
+                        </td>
+                      );
+                    })}
+                    <td className="px-4 py-2.5 text-right tabular-nums font-bold text-indigo-800">
+                      ₹{stats.transferToCompany.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                  {/* Cash row */}
+                  <tr className="bg-emerald-50 border-t border-emerald-200">
+                    <td className="px-4 py-2.5 sticky left-0 bg-emerald-50 z-10"></td>
+                    <td className="px-4 py-2.5 sticky left-10 bg-emerald-50 z-10">
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0"></span>
+                        <span className="text-xs font-semibold text-emerald-700">Cash</span>
+                        <span className="text-[10px] text-emerald-400 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded-full hidden sm:inline">Other</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2.5"></td>
+                    {visibleNPs.map((np, idx) => {
+                      const isOther = idx >= LOKMAT_COUNT;
+                      const t = isOther ? fullDayRows.reduce((s, r) => s + (r.newspapers[np.name] ?? 0), 0) : 0;
+                      return (
+                        <td key={`fdft-cash-${np.name}`} className="px-4 py-2.5 text-right tabular-nums text-xs text-emerald-600">
+                          {isOther && t > 0 ? `₹${t.toFixed(0)}` : <span className="text-slate-200">—</span>}
+                        </td>
+                      );
+                    })}
+                    <td className="px-4 py-2.5 text-right tabular-nums font-bold text-emerald-800">
+                      ₹{stats.cash.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                  </tr>
                 </tfoot>
               )}
             </table>
@@ -686,6 +815,52 @@ export default function TrackerView() {
                     })}
                     <td className="px-4 py-3 text-right tabular-nums">
                       ₹{monthlyRows.reduce((s, r) => s + r.totalBill, 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                  {/* Transfer to Company row */}
+                  <tr className="bg-indigo-50 border-t border-indigo-200">
+                    <td className="px-4 py-2.5 sticky left-0 bg-indigo-50 z-10"></td>
+                    <td className="px-4 py-2.5 sticky left-10 bg-indigo-50 z-10">
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-block w-2 h-2 rounded-full bg-indigo-500 flex-shrink-0"></span>
+                        <span className="text-xs font-semibold text-indigo-700">Transfer to Company</span>
+                        <span className="text-[10px] text-indigo-400 bg-indigo-100 border border-indigo-200 px-1.5 py-0.5 rounded-full hidden sm:inline">Lokmat</span>
+                      </div>
+                    </td>
+                    {visibleNPs.map((np, idx) => {
+                      const isLokmat = idx < LOKMAT_COUNT;
+                      const t = isLokmat ? monthlyRows.reduce((s, r) => s + (r.newspapers[np.name] ?? 0), 0) : 0;
+                      return (
+                        <td key={`mft-tc-${np.name}`} className="px-4 py-2.5 text-right tabular-nums text-xs text-indigo-600">
+                          {isLokmat && t > 0 ? `₹${t.toFixed(0)}` : <span className="text-slate-200">—</span>}
+                        </td>
+                      );
+                    })}
+                    <td className="px-4 py-2.5 text-right tabular-nums font-bold text-indigo-800">
+                      ₹{stats.transferToCompany.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                  {/* Cash row */}
+                  <tr className="bg-emerald-50 border-t border-emerald-200">
+                    <td className="px-4 py-2.5 sticky left-0 bg-emerald-50 z-10"></td>
+                    <td className="px-4 py-2.5 sticky left-10 bg-emerald-50 z-10">
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0"></span>
+                        <span className="text-xs font-semibold text-emerald-700">Cash</span>
+                        <span className="text-[10px] text-emerald-400 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded-full hidden sm:inline">Other</span>
+                      </div>
+                    </td>
+                    {visibleNPs.map((np, idx) => {
+                      const isOther = idx >= LOKMAT_COUNT;
+                      const t = isOther ? monthlyRows.reduce((s, r) => s + (r.newspapers[np.name] ?? 0), 0) : 0;
+                      return (
+                        <td key={`mft-cash-${np.name}`} className="px-4 py-2.5 text-right tabular-nums text-xs text-emerald-600">
+                          {isOther && t > 0 ? `₹${t.toFixed(0)}` : <span className="text-slate-200">—</span>}
+                        </td>
+                      );
+                    })}
+                    <td className="px-4 py-2.5 text-right tabular-nums font-bold text-emerald-800">
+                      ₹{stats.cash.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </td>
                   </tr>
                 </tfoot>
