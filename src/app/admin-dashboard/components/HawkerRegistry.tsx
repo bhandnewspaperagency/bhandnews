@@ -7,6 +7,86 @@ import { getHawkers, saveHawker, deleteHawker, deleteHawkers } from '@/lib/stora
 import type { Hawker } from '@/lib/storage';
 import HawkerFormModal from './HawkerFormModal';
 
+// ─── Delete Confirmation Modal ────────────────────────────────────────────────
+interface DeleteConfirmModalProps {
+  hawker: Hawker;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+function DeleteConfirmModal({ hawker, onConfirm, onCancel }: DeleteConfirmModalProps) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-fade-in">
+        <div className="px-5 py-4 border-b border-slate-100">
+          <h3 className="text-base font-bold text-slate-900">Delete Hawker?</h3>
+          <p className="text-xs text-slate-500 mt-1">
+            This will permanently remove{' '}
+            <span className="font-semibold text-red-600">{hawker.name}</span>{' '}
+            (ID: #{String(hawker.id).padStart(2, '0')}) from the registry. This action cannot be undone.
+          </p>
+        </div>
+        <div className="flex items-center justify-end gap-2 px-5 py-4">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 text-white hover:bg-red-700 transition-colors"
+          >
+            <Trash2 size={14} />
+            Delete Permanently
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Bulk Delete Confirmation Modal ──────────────────────────────────────────
+interface BulkDeleteConfirmModalProps {
+  count: number;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+function BulkDeleteConfirmModal({ count, onConfirm, onCancel }: BulkDeleteConfirmModalProps) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-fade-in">
+        <div className="px-5 py-4 border-b border-slate-100">
+          <h3 className="text-base font-bold text-slate-900">Delete {count} Hawker{count > 1 ? 's' : ''}?</h3>
+          <p className="text-xs text-slate-500 mt-1">
+            This will permanently remove <span className="font-semibold text-red-600">{count} hawker{count > 1 ? 's' : ''}</span> from the registry. This action cannot be undone.
+          </p>
+        </div>
+        <div className="flex items-center justify-end gap-2 px-5 py-4">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 text-white hover:bg-red-700 transition-colors"
+          >
+            <Trash2 size={14} />
+            Delete Permanently
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type SortKey = 'id' | 'name' | 'area' | 'paymentType' | 'status';
 type SortDir = 'asc' | 'desc';
 
@@ -22,7 +102,8 @@ export default function HawkerRegistry() {
   const [perPage] = useState(10);
   const [showModal, setShowModal] = useState(false);
   const [editHawker, setEditHawker] = useState<Hawker | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<Hawker | null>(null);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
 
   useEffect(() => {
     setHawkers(getHawkers());
@@ -83,6 +164,7 @@ export default function HawkerRegistry() {
     const count = selectedRows.size;
     setHawkers(getHawkers());
     setSelectedRows(new Set());
+    setShowBulkDeleteConfirm(false);
     toast.success(`${count} hawkers removed from registry.`);
   };
 
@@ -210,7 +292,7 @@ export default function HawkerRegistry() {
             <span className="text-sm font-semibold">{selectedRows.size} hawker{selectedRows.size > 1 ? 's' : ''} selected</span>
             <div className="flex items-center gap-3">
               <button
-                onClick={handleBulkDelete}
+                onClick={() => setShowBulkDeleteConfirm(true)}
                 className="flex items-center gap-1.5 text-sm font-semibold text-red-300 hover:text-red-100 transition-colors"
               >
                 <Trash2 size={14} />
@@ -257,7 +339,7 @@ export default function HawkerRegistry() {
                     >
                       <Edit2 size={14} />
                     </button>
-                    {deleteConfirm === h.id ? (
+                    {deleteConfirm?.id === h.id ? (
                       <>
                         <button onClick={() => handleDelete(h.id)} className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center text-red-600">
                           <Trash2 size={14} />
@@ -267,7 +349,7 @@ export default function HawkerRegistry() {
                         </button>
                       </>
                     ) : (
-                      <button onClick={() => setDeleteConfirm(h.id)} className="w-8 h-8 rounded-lg hover:bg-red-50 flex items-center justify-center text-slate-400 hover:text-red-600">
+                      <button onClick={() => setDeleteConfirm(h)} className="w-8 h-8 rounded-lg hover:bg-red-50 flex items-center justify-center text-slate-400 hover:text-red-600">
                         <Trash2 size={14} />
                       </button>
                     )}
@@ -392,7 +474,7 @@ export default function HawkerRegistry() {
                         >
                           <Edit2 size={13} />
                         </button>
-                        {deleteConfirm === h.id ? (
+                        {deleteConfirm?.id === h.id ? (
                           <div className="flex items-center gap-1">
                             <button
                               onClick={() => handleDelete(h.id)}
@@ -411,7 +493,7 @@ export default function HawkerRegistry() {
                           </div>
                         ) : (
                           <button
-                            onClick={() => setDeleteConfirm(h.id)}
+                            onClick={() => setDeleteConfirm(h)}
                             className="w-7 h-7 rounded-lg hover:bg-red-50 flex items-center justify-center text-slate-400 hover:text-red-600 transition-colors"
                             title="Delete"
                           >
@@ -456,6 +538,24 @@ export default function HawkerRegistry() {
           hawker={editHawker}
           onSave={handleSaveHawker}
           onClose={() => { setShowModal(false); setEditHawker(null); }}
+        />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <DeleteConfirmModal
+          hawker={deleteConfirm}
+          onConfirm={() => handleDelete(deleteConfirm.id)}
+          onCancel={() => setDeleteConfirm(null)}
+        />
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {showBulkDeleteConfirm && (
+        <BulkDeleteConfirmModal
+          count={selectedRows.size}
+          onConfirm={handleBulkDelete}
+          onCancel={() => setShowBulkDeleteConfirm(false)}
         />
       )}
     </div>

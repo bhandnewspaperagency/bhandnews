@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
-import { Save, X, ChevronLeft, ChevronRight, TrendingUp, IndianRupee, Edit2, Check } from 'lucide-react';
+import { Save, X, ChevronLeft, ChevronRight, TrendingUp, IndianRupee, Edit2, Check, Trash2 } from 'lucide-react';
 import {
   getAllRates,
   saveRatesForDate,
@@ -46,6 +46,47 @@ function formatWeekRange(monday: Date): string {
 
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
+// ─── Delete Confirmation Modal ────────────────────────────────────────────────
+interface DeleteRateConfirmModalProps {
+  dateLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+function DeleteRateConfirmModal({ dateLabel, onConfirm, onCancel }: DeleteRateConfirmModalProps) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-fade-in">
+        <div className="px-5 py-4 border-b border-slate-100">
+          <h3 className="text-base font-bold text-slate-900">Delete Rate Configuration?</h3>
+          <p className="text-xs text-slate-500 mt-1">
+            This will permanently remove the custom rates for{' '}
+            <span className="font-semibold text-red-600">{dateLabel}</span>.
+            The system will revert to default rates for that day. This action cannot be undone.
+          </p>
+        </div>
+        <div className="flex items-center justify-end gap-2 px-5 py-4">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 text-white hover:bg-red-700 transition-colors"
+          >
+            <Trash2 size={14} />
+            Delete Permanently
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── component ───────────────────────────────────────────────────────────────
 
 export default function RateManagement() {
@@ -57,6 +98,9 @@ export default function RateManagement() {
   // editingDay = ISO date string of the day being edited, or null
   const [editingDay, setEditingDay] = useState<string | null>(null);
   const [rateInputs, setRateInputs] = useState<Record<string, string>>({});
+
+  // delete confirmation modal state
+  const [deleteConfirmDate, setDeleteConfirmDate] = useState<string | null>(null);
 
   // all saved rate records (for lookup)
   const [, setAllRates] = useState<ReturnType<typeof getAllRates>>([]);
@@ -118,9 +162,9 @@ export default function RateManagement() {
   };
 
   const clearDay = (dateISO: string) => {
-    if (!confirm(`Clear custom rates for ${formatShortDate(dateISO)}? Default rates will be used.`)) return;
     deleteRatesForDate(dateISO);
     reload();
+    setDeleteConfirmDate(null);
     toast.success(`Custom rates cleared for ${formatShortDate(dateISO)}`);
   };
 
@@ -327,11 +371,11 @@ export default function RateManagement() {
                           </button>
                           {custom && (
                             <button
-                              onClick={() => clearDay(dateISO)}
+                              onClick={() => setDeleteConfirmDate(dateISO)}
                               className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors"
-                              title="Clear custom rates (revert to default)"
+                              title="Delete custom rates (revert to default)"
                             >
-                              <X size={13} />
+                              <Trash2 size={13} />
                             </button>
                           )}
                         </div>
@@ -368,6 +412,15 @@ export default function RateManagement() {
           </div>
         </div>
       </div>
+
+      {/* Delete Rate Confirmation Modal */}
+      {deleteConfirmDate && (
+        <DeleteRateConfirmModal
+          dateLabel={formatShortDate(deleteConfirmDate)}
+          onConfirm={() => clearDay(deleteConfirmDate)}
+          onCancel={() => setDeleteConfirmDate(null)}
+        />
+      )}
     </div>
   );
 }

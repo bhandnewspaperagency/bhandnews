@@ -3,7 +3,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
-import { Search, Send, CheckCircle2, AlertCircle, MessageSquare, ChevronDown, Printer, Info, Settings, X, Save } from 'lucide-react';
+import { Search, Send, CheckCircle2, AlertCircle, MessageSquare, ChevronDown, Printer, Info, Settings, X, Save, Trash2 } from 'lucide-react';
 import { getHawkers, saveBillingRecord, NEWSPAPERS, getRateForDate, getPreviousDayRate, getFreeQtyForHawker, saveFreeQtyForHawker, getExistingBillingRecord, deleteBillingRecordForHawkerDate } from '@/lib/storage';
 import type { Hawker, DailyBillingRecord, HawkerFreeQtyEntry } from '@/lib/storage';
 
@@ -133,6 +133,7 @@ export default function DailyBillingEntry() {
   const [lokmtPaymentType, setLokmtPaymentType] = useState<'Transfer' | 'Cash'>('Transfer');
   const [isDataPreloaded, setIsDataPreloaded] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showDeleteBillingConfirm, setShowDeleteBillingConfirm] = useState(false);
   const [rows, setRows] = useState<BillingRow[]>(
     NEWSPAPERS.map(() => ({ supplyQty: 0, returnQty: 0, freePvc: 0 }))
   );
@@ -345,6 +346,22 @@ export default function DailyBillingEntry() {
     setIsDataPreloaded(false);
     setShowResetConfirm(false);
     toast.success(`Billing data reset for ${selectedHawker.name} on ${new Date(billDate).toLocaleDateString('en-IN')}`);
+  };
+
+  const handleDeleteBillingEntry = () => {
+    if (!selectedHawker || !billDate) return;
+    deleteBillingRecordForHawkerDate(selectedHawker.id, billDate);
+    const saved = getFreeQtyForHawker(selectedHawker.id);
+    setRows(
+      NEWSPAPERS.map((np) => {
+        const entry = saved.find((e) => e.newspaper === np.name);
+        return { supplyQty: 0, returnQty: 0, freePvc: entry ? entry.freeQty : 0 };
+      })
+    );
+    setSubmitted(false);
+    setIsDataPreloaded(false);
+    setShowDeleteBillingConfirm(false);
+    toast.success(`Billing entry deleted for ${selectedHawker.name} on ${new Date(billDate).toLocaleDateString('en-IN')}`);
   };
 
   const handlePrint = () => {
@@ -624,6 +641,41 @@ export default function DailyBillingEntry() {
         </div>
       )}
 
+      {/* Delete Billing Entry Confirmation Modal */}
+      {showDeleteBillingConfirm && selectedHawker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-fade-in">
+            <div className="px-5 py-4 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900">Delete Billing Entry?</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                This will permanently delete the billing record for{' '}
+                <span className="font-semibold text-red-600">{selectedHawker.name}</span>{' '}
+                on{' '}
+                <span className="font-semibold">{new Date(billDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>.
+                This action cannot be undone.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-4">
+              <button
+                type="button"
+                onClick={() => setShowDeleteBillingConfirm(false)}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteBillingEntry}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 text-white hover:bg-red-700 transition-colors"
+              >
+                <Trash2 size={14} />
+                Delete Permanently
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-start sm:items-center justify-between gap-2">
         <div>
           <h2 className="text-xl font-bold text-slate-900">Daily Billing Entry</h2>
@@ -742,6 +794,14 @@ export default function DailyBillingEntry() {
             {new Date(billDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}.
             Edit any field and re-save, or use <strong>Reset Day Data</strong> to start fresh.
           </p>
+          <button
+            type="button"
+            onClick={() => setShowDeleteBillingConfirm(true)}
+            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-colors"
+          >
+            <Trash2 size={12} />
+            Delete Entry
+          </button>
           <button
             type="button"
             onClick={() => setShowResetConfirm(true)}
@@ -1051,6 +1111,16 @@ export default function DailyBillingEntry() {
           >
             Clear Hawker
           </button>
+          {isDataPreloaded && selectedHawker && (
+            <button
+              type="button"
+              onClick={() => setShowDeleteBillingConfirm(true)}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold border border-red-300 text-red-600 hover:bg-red-50 transition-colors min-h-[44px]"
+            >
+              <Trash2 size={14} />
+              Delete Entry
+            </button>
+          )}
           {isDataPreloaded && selectedHawker && (
             <button
               type="button"
