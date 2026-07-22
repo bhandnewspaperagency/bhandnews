@@ -130,6 +130,7 @@ export default function DailyBillingEntry() {
   const [submitted, setSubmitted] = useState(false);
   const [whatsappSending, setWhatsappSending] = useState(false);
   const [showFreeQtyModal, setShowFreeQtyModal] = useState(false);
+  const [lokmtPaymentType, setLokmtPaymentType] = useState<'Transfer' | 'Cash'>('Transfer');
   const [rows, setRows] = useState<BillingRow[]>(
     NEWSPAPERS.map(() => ({ supplyQty: 0, returnQty: 0, freePvc: 0 }))
   );
@@ -182,6 +183,11 @@ export default function DailyBillingEntry() {
   };
 
   const getTotalBill = () => NEWSPAPERS.reduce((sum, _, i) => sum + getTotal(i), 0);
+
+  // Lokmat = first 3 newspapers (indices 0, 1, 2)
+  const LOKMAT_COUNT = 3;
+  const getLokmtSubtotal = () => NEWSPAPERS.slice(0, LOKMAT_COUNT).reduce((sum, _, i) => sum + getTotal(i), 0);
+  const getOtherSubtotal = () => NEWSPAPERS.slice(LOKMAT_COUNT).reduce((sum, _, i) => sum + getTotal(LOKMAT_COUNT + i), 0);
 
   const ratesAreDifferent = (i: number) => supplyRates[i] !== returnRates[i];
 
@@ -666,53 +672,89 @@ export default function DailyBillingEntry() {
             const total = getTotal(i);
             const hasEntry = rows[i]?.supplyQty > 0;
             return (
-              <div key={`mob-billing-${np.name}`} className={`px-4 py-3 space-y-2 ${hasEntry ? 'bg-[hsl(210,67%,98%)]' : ''}`}>
-                <div className="flex items-center justify-between">
-                  <span className={`text-sm font-semibold ${hasEntry ? 'text-[hsl(210,67%,23%)]' : 'text-slate-700'}`}>{np.name}</span>
-                  <span className={`font-mono text-sm font-bold ${total > 0 ? 'text-slate-900' : 'text-slate-300'}`}>
-                    {total > 0 ? `₹${total.toFixed(2)}` : '—'}
-                  </span>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <label className="text-[10px] text-slate-400 block mb-1">Supply</label>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min={0}
-                      value={rows[i]?.supplyQty || ''}
-                      onChange={(e) => updateRow(i, 'supplyQty', e.target.value)}
-                      className="w-full text-center input-field text-sm tabular-nums min-h-[44px]"
-                      placeholder="0"
-                    />
+              <React.Fragment key={`mob-billing-${np.name}`}>
+                <div className={`px-4 py-3 space-y-2 ${hasEntry ? 'bg-[hsl(210,67%,98%)]' : ''}`}>
+                  <div className="flex items-center justify-between">
+                    <span className={`text-sm font-semibold ${hasEntry ? 'text-[hsl(210,67%,23%)]' : 'text-slate-700'}`}>{np.name}</span>
+                    <span className={`font-mono text-sm font-bold ${total > 0 ? 'text-slate-900' : 'text-slate-300'}`}>
+                      {total > 0 ? `₹${total.toFixed(2)}` : '—'}
+                    </span>
                   </div>
-                  <div>
-                    <label className="text-[10px] text-slate-400 block mb-1">Return</label>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min={0}
-                      value={rows[i]?.returnQty || ''}
-                      onChange={(e) => updateRow(i, 'returnQty', e.target.value)}
-                      className="w-full text-center input-field text-sm tabular-nums min-h-[44px]"
-                      placeholder="0"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-slate-400 block mb-1">Net / Free</label>
-                    <div className="flex items-center gap-1">
-                      <span className={`font-mono text-sm font-semibold ${netQty > 0 ? 'text-[hsl(210,67%,23%)]' : 'text-slate-300'} flex-1 text-center`}>{netQty}</span>
-                      <span
-                        className="w-14 text-center text-xs tabular-nums min-h-[44px] flex items-center justify-center bg-slate-100 border border-slate-200 rounded-lg text-slate-500 font-mono cursor-not-allowed select-none"
-                        title="Edit via Free Qty Settings"
-                      >{rows[i]?.freePvc || 0}</span>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">Supply</label>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        value={rows[i]?.supplyQty || ''}
+                        onChange={(e) => updateRow(i, 'supplyQty', e.target.value)}
+                        className="w-full text-center input-field text-sm tabular-nums min-h-[44px]"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">Return</label>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        value={rows[i]?.returnQty || ''}
+                        onChange={(e) => updateRow(i, 'returnQty', e.target.value)}
+                        className="w-full text-center input-field text-sm tabular-nums min-h-[44px]"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">Net / Free</label>
+                      <div className="flex items-center gap-1">
+                        <span className={`font-mono text-sm font-semibold ${netQty > 0 ? 'text-[hsl(210,67%,23%)]' : 'text-slate-300'} flex-1 text-center`}>{netQty}</span>
+                        <span
+                          className="w-14 text-center text-xs tabular-nums min-h-[44px] flex items-center justify-center bg-slate-100 border border-slate-200 rounded-lg text-slate-500 font-mono cursor-not-allowed select-none"
+                          title="Edit via Free Qty Settings"
+                        >{rows[i]?.freePvc || 0}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+                {/* Lokmat subtotal divider after 3rd newspaper */}
+                {i === LOKMAT_COUNT - 1 && (
+                  <div className="bg-indigo-50 border-y-2 border-indigo-200 px-4 py-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-indigo-700 uppercase tracking-wide">Lokmat Total</span>
+                        <span className="text-[10px] text-indigo-500 bg-indigo-100 px-1.5 py-0.5 rounded">(Direct Pay to Company)</span>
+                      </div>
+                      <span className="font-mono font-bold text-indigo-800 text-base">₹{getLokmtSubtotal().toFixed(2)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-indigo-600 font-medium">Payment:</span>
+                      <div className="flex gap-2">
+                        {(['Transfer', 'Cash'] as const).map((opt) => (
+                          <button
+                            key={opt}
+                            type="button"
+                            onClick={() => setLokmtPaymentType(opt)}
+                            className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-colors ${
+                              lokmtPaymentType === opt
+                                ? 'bg-indigo-700 text-white border-indigo-700' :'bg-white text-indigo-600 border-indigo-300 hover:bg-indigo-50'
+                            }`}
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </React.Fragment>
             );
           })}
           {/* Mobile grand total */}
+          <div className="bg-slate-100 border-t border-slate-200 px-4 py-2.5 flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500">Other Newspapers Total</span>
+            <span className="font-mono font-bold text-slate-700">₹{getOtherSubtotal().toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+          </div>
           <div className="bg-[hsl(210,67%,23%)] text-white px-4 py-3 flex items-center justify-between">
             <span className="text-sm font-semibold">Grand Total</span>
             <span className="font-mono font-bold text-lg">₹{getTotalBill().toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
@@ -743,69 +785,124 @@ export default function DailyBillingEntry() {
                 const ratesDiffer = ratesAreDifferent(i);
                 const hasFreeQty = (rows[i]?.freePvc || 0) > 0;
                 return (
-                  <tr
-                    key={`billing-row-${np.name}`}
-                    className={`border-b border-[hsl(220,15%,93%)] transition-colors ${
-                      hasEntry ? 'bg-[hsl(210,67%,98%)]' : 'hover:bg-slate-50/60'
-                    }`}
-                  >
-                    <td className="table-cell text-xs text-slate-400 font-mono w-8">{i + 1}</td>
-                    <td className="table-cell">
-                      <span className={`text-sm font-medium ${hasEntry ? 'text-[hsl(210,67%,23%)]' : 'text-slate-700'}`}>
-                        {np.name}
-                      </span>
-                    </td>
-                    <td className="table-cell text-right font-mono text-sm text-slate-600">
-                      {supplyRates[i]?.toFixed(2) ?? np.rate.toFixed(2)}
-                    </td>
-                    <td className="table-cell text-right font-mono text-sm">
-                      <span className={ratesDiffer ? 'text-amber-600 font-semibold' : 'text-slate-400'}>
-                        {returnRates[i]?.toFixed(2) ?? np.rate.toFixed(2)}
-                      </span>
-                    </td>
-                    <td className="table-cell text-center">
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={0}
-                        value={rows[i]?.supplyQty || ''}
-                        onChange={(e) => updateRow(i, 'supplyQty', e.target.value)}
-                        className="w-20 text-center input-field text-sm tabular-nums"
-                        placeholder="0"
-                      />
-                    </td>
-                    <td className="table-cell text-center">
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={0}
-                        value={rows[i]?.returnQty || ''}
-                        onChange={(e) => updateRow(i, 'returnQty', e.target.value)}
-                        className="w-20 text-center input-field text-sm tabular-nums"
-                        placeholder="0"
-                      />
-                    </td>
-                    <td className="table-cell text-center">
-                      <span
-                        className={`inline-flex items-center justify-center w-20 min-h-[36px] rounded-lg border text-sm tabular-nums font-mono cursor-not-allowed select-none ${hasFreeQty ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-slate-200 bg-slate-100 text-slate-500'}`}
-                        title="Edit via Free Qty Settings"
-                      >{rows[i]?.freePvc || 0}</span>
-                    </td>
-                    <td className="table-cell text-center bg-blue-50/40">
-                      <span className={`font-mono text-sm font-semibold ${netQty > 0 ? 'text-[hsl(210,67%,23%)]' : 'text-slate-300'}`}>
-                        {netQty}
-                      </span>
-                    </td>
-                    <td className="table-cell text-right bg-blue-50/40">
-                      <span className={`font-mono text-sm font-semibold ${total > 0 ? 'text-slate-900' : 'text-slate-300'}`}>
-                        {total > 0 ? `₹${total.toFixed(2)}` : '—'}
-                      </span>
-                    </td>
-                  </tr>
+                  <React.Fragment key={`billing-row-${np.name}`}>
+                    <tr
+                      className={`border-b border-[hsl(220,15%,93%)] transition-colors ${
+                        hasEntry ? 'bg-[hsl(210,67%,98%)]' : 'hover:bg-slate-50/60'
+                      }`}
+                    >
+                      <td className="table-cell text-xs text-slate-400 font-mono w-8">{i + 1}</td>
+                      <td className="table-cell">
+                        <span className={`text-sm font-medium ${hasEntry ? 'text-[hsl(210,67%,23%)]' : 'text-slate-700'}`}>
+                          {np.name}
+                        </span>
+                      </td>
+                      <td className="table-cell text-right font-mono text-sm text-slate-600">
+                        {supplyRates[i]?.toFixed(2) ?? np.rate.toFixed(2)}
+                      </td>
+                      <td className="table-cell text-right font-mono text-sm">
+                        <span className={ratesDiffer ? 'text-amber-600 font-semibold' : 'text-slate-400'}>
+                          {returnRates[i]?.toFixed(2) ?? np.rate.toFixed(2)}
+                        </span>
+                      </td>
+                      <td className="table-cell text-center">
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          value={rows[i]?.supplyQty || ''}
+                          onChange={(e) => updateRow(i, 'supplyQty', e.target.value)}
+                          className="w-20 text-center input-field text-sm tabular-nums"
+                          placeholder="0"
+                        />
+                      </td>
+                      <td className="table-cell text-center">
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          value={rows[i]?.returnQty || ''}
+                          onChange={(e) => updateRow(i, 'returnQty', e.target.value)}
+                          className="w-20 text-center input-field text-sm tabular-nums"
+                          placeholder="0"
+                        />
+                      </td>
+                      <td className="table-cell text-center">
+                        <span
+                          className={`inline-flex items-center justify-center w-20 min-h-[36px] rounded-lg border text-sm tabular-nums font-mono cursor-not-allowed select-none ${hasFreeQty ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-slate-200 bg-slate-100 text-slate-500'}`}
+                          title="Edit via Free Qty Settings"
+                        >{rows[i]?.freePvc || 0}</span>
+                      </td>
+                      <td className="table-cell text-center bg-blue-50/40">
+                        <span className={`font-mono text-sm font-semibold ${netQty > 0 ? 'text-[hsl(210,67%,23%)]' : 'text-slate-300'}`}>
+                          {netQty}
+                        </span>
+                      </td>
+                      <td className="table-cell text-right bg-blue-50/40">
+                        <span className={`font-mono text-sm font-semibold ${total > 0 ? 'text-slate-900' : 'text-slate-300'}`}>
+                          {total > 0 ? `₹${total.toFixed(2)}` : '—'}
+                        </span>
+                      </td>
+                    </tr>
+                    {/* Lokmat subtotal row after 3rd newspaper */}
+                    {i === LOKMAT_COUNT - 1 && (
+                      <tr className="border-b-2 border-indigo-300 bg-indigo-50">
+                        <td colSpan={5} className="px-4 py-2.5">
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs font-bold text-indigo-700 uppercase tracking-wide">Lokmat Total</span>
+                            <span className="text-[10px] text-indigo-500 bg-indigo-100 border border-indigo-200 px-2 py-0.5 rounded-full">Direct Pay to Company</span>
+                            <div className="flex items-center gap-1.5 ml-2">
+                              <span className="text-xs text-indigo-600 font-medium">Payment:</span>
+                              {(['Transfer', 'Cash'] as const).map((opt) => (
+                                <button
+                                  key={opt}
+                                  type="button"
+                                  onClick={() => setLokmtPaymentType(opt)}
+                                  className={`px-2.5 py-0.5 rounded-md text-xs font-semibold border transition-colors ${
+                                    lokmtPaymentType === opt
+                                      ? 'bg-indigo-700 text-white border-indigo-700' :'bg-white text-indigo-600 border-indigo-300 hover:bg-indigo-50'
+                                  }`}
+                                >
+                                  {opt}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </td>
+                        <td colSpan={2} className="px-4 py-2.5 text-center">
+                          <span className="text-xs text-indigo-500 font-mono">
+                            {NEWSPAPERS.slice(0, LOKMAT_COUNT).reduce((s, _, j) => s + (rows[j]?.freePvc || 0), 0)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-center">
+                          <span className="text-xs text-indigo-500 font-mono">
+                            {NEWSPAPERS.slice(0, LOKMAT_COUNT).reduce((s, _, j) => s + getNetQty(j), 0)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-right bg-indigo-100/60">
+                          <span className="font-mono font-bold text-indigo-800 text-sm">
+                            ₹{getLokmtSubtotal().toFixed(2)}
+                          </span>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 );
               })}
             </tbody>
             <tfoot>
+              <tr className="bg-slate-100 border-t border-slate-200">
+                <td colSpan={6} className="px-4 py-2 text-xs font-semibold text-slate-500">Other Newspapers Total</td>
+                <td className="px-4 py-2 text-center font-mono text-xs text-slate-500">
+                  {NEWSPAPERS.slice(LOKMAT_COUNT).reduce((s, _, j) => s + (rows[LOKMAT_COUNT + j]?.freePvc || 0), 0)}
+                </td>
+                <td className="px-4 py-2 text-center font-mono text-xs text-slate-500">
+                  {NEWSPAPERS.slice(LOKMAT_COUNT).reduce((s, _, j) => s + getNetQty(LOKMAT_COUNT + j), 0)}
+                </td>
+                <td className="px-4 py-2 text-right font-mono font-semibold text-slate-700">
+                  ₹{getOtherSubtotal().toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </td>
+              </tr>
               <tr className="bg-[hsl(210,67%,23%)] text-white">
                 <td colSpan={6} className="px-4 py-3 text-sm font-semibold">Grand Total</td>
                 <td className="px-4 py-3 text-center font-mono font-bold">
