@@ -12,6 +12,7 @@ import RateManagement from './RateManagement';
 import TrackerView from './TrackerView';
 import NewspaperGroups from './NewspaperGroups';
 import BackupRestore from './BackupRestore';
+import SettingsView from './SettingsView';
 
 export default function AdminDashboardClient() {
   const [activeSection, setActiveSection] = useState('dashboard');
@@ -28,6 +29,7 @@ export default function AdminDashboardClient() {
       case 'groups': return <NewspaperGroups />;
       case 'reports': return <ReportsView />;
       case 'backup': return <BackupRestore />;
+      case 'settings': return <SettingsView />;
       default: return <DashboardOverview onNavigate={setActiveSection} />;
     }
   };
