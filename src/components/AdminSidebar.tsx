@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Newspaper, LayoutDashboard, Users, ClipboardList, BarChart3, Settings, ChevronLeft, ChevronRight, LogOut, Calendar, IndianRupee, Activity, Layers, HardDriveDownload, X } from 'lucide-react';
+import { Newspaper, LayoutDashboard, Users, ClipboardList, BarChart3, Settings, ChevronLeft, ChevronRight, LogOut, Calendar, IndianRupee, Activity, Layers, HardDriveDownload, X, BookCopy } from 'lucide-react';
 
 interface NavItem {
   id: string;
@@ -19,6 +19,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'hawkers', label: 'Hawker Registry', icon: <Users size={18} />, section: 'MAIN' },
   { id: 'monthly', label: 'Monthly Tracker', icon: <Calendar size={18} />, section: 'MAIN' },
   { id: 'tracker', label: 'Tracker', icon: <Activity size={18} />, section: 'MAIN' },
+  { id: 'copies-tracker', label: 'Copies Tracker', icon: <BookCopy size={18} />, section: 'MAIN' },
   { id: 'groups', label: 'Newspaper Groups', icon: <Layers size={18} />, section: 'MAIN' },
   { id: 'reports', label: 'Reports', icon: <BarChart3 size={18} />, section: 'REPORTS' },
   { id: 'backup', label: 'Backup & Restore', icon: <HardDriveDownload size={18} />, section: 'SYSTEM' },

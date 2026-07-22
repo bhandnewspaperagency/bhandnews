@@ -10,6 +10,7 @@ import MonthlyTrackerView from './MonthlyTrackerView';
 import ReportsView from './ReportsView';
 import RateManagement from './RateManagement';
 import TrackerView from './TrackerView';
+import CopiesTrackerView from './CopiesTrackerView';
 import NewspaperGroups from './NewspaperGroups';
 import BackupRestore from './BackupRestore';
 import SettingsView from './SettingsView';
@@ -26,6 +27,7 @@ export default function AdminDashboardClient() {
       case 'hawkers': return <HawkerRegistry />;
       case 'monthly': return <MonthlyTrackerView />;
       case 'tracker': return <TrackerView />;
+      case 'copies-tracker': return <CopiesTrackerView />;
       case 'groups': return <NewspaperGroups />;
       case 'reports': return <ReportsView />;
       case 'backup': return <BackupRestore />;
