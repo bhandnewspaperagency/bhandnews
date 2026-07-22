@@ -180,7 +180,7 @@ export default function DailyBillingEntry() {
             supplyQty: entry.supplyQty,
             returnQty: entry.returnQty,
             freePvc: entry.netQty !== undefined
-              ? Math.max(0, entry.supplyQty - entry.returnQty - entry.netQty)
+              ? Math.max(0, entry.supplyQty - entry.netQty)
               : 0,
           };
         }
@@ -208,13 +208,13 @@ export default function DailyBillingEntry() {
     });
   };
 
-  const getNetQty = (i: number) => Math.max(0, (rows[i]?.supplyQty || 0) - (rows[i]?.returnQty || 0) - (rows[i]?.freePvc || 0));
+  const getNetQty = (i: number) => Math.max(0, (rows[i]?.supplyQty || 0) - (rows[i]?.freePvc || 0));
 
-  // Total = (supplyQty × supplyRate) - (returnQty × returnRate)
+  // Total = (NetQty × today's rate) - (ReturnQty × previous day's rate)
   const getTotal = (i: number) => {
-    const supply = (rows[i]?.supplyQty || 0) * supplyRates[i];
+    const netQty = getNetQty(i);
     const ret = (rows[i]?.returnQty || 0) * returnRates[i];
-    return Math.max(0, supply - ret);
+    return Math.max(0, netQty * supplyRates[i] - ret);
   };
 
   const getTotalBill = () => NEWSPAPERS.reduce((sum, _, i) => sum + getTotal(i), 0);
