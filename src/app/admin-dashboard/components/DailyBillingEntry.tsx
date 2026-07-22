@@ -173,7 +173,7 @@ export default function DailyBillingEntry() {
     });
   };
 
-  const getNetQty = (i: number) => Math.max(0, (rows[i]?.supplyQty || 0) - (rows[i]?.returnQty || 0));
+  const getNetQty = (i: number) => Math.max(0, (rows[i]?.supplyQty || 0) - (rows[i]?.freePvc || 0));
 
   // Total = (supplyQty × supplyRate) - (returnQty × returnRate)
   const getTotal = (i: number) => {
