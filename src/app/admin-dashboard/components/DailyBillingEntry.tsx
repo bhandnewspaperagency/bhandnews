@@ -478,7 +478,7 @@ export default function DailyBillingEntry() {
       </tr>
     </thead>
     <tbody>
-      ${tableRows}
+      {tableRows}
     </tbody>
     <tfoot>
       <tr>
@@ -702,15 +702,10 @@ export default function DailyBillingEntry() {
                     <label className="text-[10px] text-slate-400 block mb-1">Net / Free</label>
                     <div className="flex items-center gap-1">
                       <span className={`font-mono text-sm font-semibold ${netQty > 0 ? 'text-[hsl(210,67%,23%)]' : 'text-slate-300'} flex-1 text-center`}>{netQty}</span>
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={0}
-                        value={rows[i]?.freePvc || ''}
-                        onChange={(e) => updateRow(i, 'freePvc', e.target.value)}
-                        className="w-14 text-center input-field text-xs tabular-nums min-h-[44px]"
-                        placeholder="0"
-                      />
+                      <span
+                        className="w-14 text-center text-xs tabular-nums min-h-[44px] flex items-center justify-center bg-slate-100 border border-slate-200 rounded-lg text-slate-500 font-mono cursor-not-allowed select-none"
+                        title="Edit via Free Qty Settings"
+                      >{rows[i]?.freePvc || 0}</span>
                     </div>
                   </div>
                 </div>
@@ -791,15 +786,10 @@ export default function DailyBillingEntry() {
                       />
                     </td>
                     <td className="table-cell text-center">
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={0}
-                        value={rows[i]?.freePvc || ''}
-                        onChange={(e) => updateRow(i, 'freePvc', e.target.value)}
-                        className={`w-20 text-center input-field text-sm tabular-nums ${hasFreeQty ? 'border-amber-300 bg-amber-50' : ''}`}
-                        placeholder="0"
-                      />
+                      <span
+                        className={`inline-flex items-center justify-center w-20 min-h-[36px] rounded-lg border text-sm tabular-nums font-mono cursor-not-allowed select-none ${hasFreeQty ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-slate-200 bg-slate-100 text-slate-500'}`}
+                        title="Edit via Free Qty Settings"
+                      >{rows[i]?.freePvc || 0}</span>
                     </td>
                     <td className="table-cell text-center bg-blue-50/40">
                       <span className={`font-mono text-sm font-semibold ${netQty > 0 ? 'text-[hsl(210,67%,23%)]' : 'text-slate-300'}`}>
