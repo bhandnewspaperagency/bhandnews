@@ -6,6 +6,7 @@ import { Search, Edit2, Trash2, Phone, MapPin, Filter, ChevronUp, ChevronDown, X
 import { getHawkers, saveHawker, deleteHawker, deleteHawkers } from '@/lib/storage';
 import type { Hawker } from '@/lib/storage';
 import HawkerFormModal from './HawkerFormModal';
+import PinModal from './PinModal';
 
 // ─── Delete Confirmation Modal ────────────────────────────────────────────────
 interface DeleteConfirmModalProps {
@@ -543,8 +544,17 @@ export default function HawkerRegistry() {
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
-        <DeleteConfirmModal
-          hawker={deleteConfirm}
+        <PinModal
+          title="Delete Hawker?"
+          description={
+            <>
+              This will permanently remove{' '}
+              <span className="font-semibold text-red-600">{deleteConfirm.name}</span>{' '}
+              (ID: #{String(deleteConfirm.id).padStart(2, '0')}) from the registry. This action cannot be undone.
+            </>
+          }
+          confirmLabel="Delete Permanently"
+          confirmIcon={<Trash2 size={14} />}
           onConfirm={() => handleDelete(deleteConfirm.id)}
           onCancel={() => setDeleteConfirm(null)}
         />
@@ -552,8 +562,17 @@ export default function HawkerRegistry() {
 
       {/* Bulk Delete Confirmation Modal */}
       {showBulkDeleteConfirm && (
-        <BulkDeleteConfirmModal
-          count={selectedRows.size}
+        <PinModal
+          title={`Delete ${selectedRows.size} Hawker${selectedRows.size > 1 ? 's' : ''}?`}
+          description={
+            <>
+              This will permanently remove{' '}
+              <span className="font-semibold text-red-600">{selectedRows.size} hawker{selectedRows.size > 1 ? 's' : ''}</span>{' '}
+              from the registry. This action cannot be undone.
+            </>
+          }
+          confirmLabel="Delete Permanently"
+          confirmIcon={<Trash2 size={14} />}
           onConfirm={handleBulkDelete}
           onCancel={() => setShowBulkDeleteConfirm(false)}
         />

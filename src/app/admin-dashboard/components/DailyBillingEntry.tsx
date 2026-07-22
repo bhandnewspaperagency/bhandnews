@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { Search, Send, CheckCircle2, AlertCircle, MessageSquare, ChevronDown, Printer, Info, Settings, X, Save, Trash2 } from 'lucide-react';
 import { getHawkers, saveBillingRecord, NEWSPAPERS, getRateForDate, getPreviousDayRate, getFreeQtyForHawker, saveFreeQtyForHawker, getExistingBillingRecord, deleteBillingRecordForHawkerDate } from '@/lib/storage';
 import type { Hawker, DailyBillingRecord, HawkerFreeQtyEntry } from '@/lib/storage';
+import PinModal from './PinModal';
 
 interface BillingRow {
   supplyQty: number;
@@ -608,72 +609,42 @@ export default function DailyBillingEntry() {
 
       {/* Reset Day Data Confirmation */}
       {showResetConfirm && selectedHawker && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-fade-in">
-            <div className="px-5 py-4 border-b border-slate-100">
-              <h3 className="text-base font-bold text-slate-900">Reset Day Data?</h3>
-              <p className="text-xs text-slate-500 mt-1">
-                This will permanently clear the saved billing data for{' '}
-                <span className="font-semibold text-[hsl(210,67%,23%)]">{selectedHawker.name}</span>{' '}
-                on{' '}
-                <span className="font-semibold">{new Date(billDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>.
-                You can re-enter fresh figures after resetting.
-              </p>
-            </div>
-            <div className="flex items-center justify-end gap-2 px-5 py-4">
-              <button
-                type="button"
-                onClick={() => setShowResetConfirm(false)}
-                className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleResetDayData}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 text-white hover:bg-red-700 transition-colors"
-              >
-                <X size={14} />
-                Yes, Reset
-              </button>
-            </div>
-          </div>
-        </div>
+        <PinModal
+          title="Reset Day Data?"
+          description={
+            <>
+              This will permanently clear the saved billing data for{' '}
+              <span className="font-semibold text-[hsl(210,67%,23%)]">{selectedHawker.name}</span>{' '}
+              on{' '}
+              <span className="font-semibold">{new Date(billDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>.
+              You can re-enter fresh figures after resetting.
+            </>
+          }
+          confirmLabel="Yes, Reset"
+          confirmIcon={<X size={14} />}
+          onConfirm={handleResetDayData}
+          onCancel={() => setShowResetConfirm(false)}
+        />
       )}
 
       {/* Delete Billing Entry Confirmation Modal */}
       {showDeleteBillingConfirm && selectedHawker && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-fade-in">
-            <div className="px-5 py-4 border-b border-slate-100">
-              <h3 className="text-base font-bold text-slate-900">Delete Billing Entry?</h3>
-              <p className="text-xs text-slate-500 mt-1">
-                This will permanently delete the billing record for{' '}
-                <span className="font-semibold text-red-600">{selectedHawker.name}</span>{' '}
-                on{' '}
-                <span className="font-semibold">{new Date(billDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>.
-                This action cannot be undone.
-              </p>
-            </div>
-            <div className="flex items-center justify-end gap-2 px-5 py-4">
-              <button
-                type="button"
-                onClick={() => setShowDeleteBillingConfirm(false)}
-                className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteBillingEntry}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 text-white hover:bg-red-700 transition-colors"
-              >
-                <Trash2 size={14} />
-                Delete Permanently
-              </button>
-            </div>
-          </div>
-        </div>
+        <PinModal
+          title="Delete Billing Entry?"
+          description={
+            <>
+              This will permanently delete the billing record for{' '}
+              <span className="font-semibold text-red-600">{selectedHawker.name}</span>{' '}
+              on{' '}
+              <span className="font-semibold">{new Date(billDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>.
+              This action cannot be undone.
+            </>
+          }
+          confirmLabel="Delete Permanently"
+          confirmIcon={<Trash2 size={14} />}
+          onConfirm={handleDeleteBillingEntry}
+          onCancel={() => setShowDeleteBillingConfirm(false)}
+        />
       )}
 
       <div className="flex items-start sm:items-center justify-between gap-2">
