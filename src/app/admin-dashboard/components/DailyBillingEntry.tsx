@@ -3,9 +3,9 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
-import { Search, Send, CheckCircle2, AlertCircle, MessageSquare, ChevronDown, Printer, Info } from 'lucide-react';
-import { getHawkers, saveBillingRecord, NEWSPAPERS, getRateForDate, getPreviousDayRate } from '@/lib/storage';
-import type { Hawker, DailyBillingRecord } from '@/lib/storage';
+import { Search, Send, CheckCircle2, AlertCircle, MessageSquare, ChevronDown, Printer, Info, Settings, X, Save } from 'lucide-react';
+import { getHawkers, saveBillingRecord, NEWSPAPERS, getRateForDate, getPreviousDayRate, getFreeQtyForHawker, saveFreeQtyForHawker } from '@/lib/storage';
+import type { Hawker, DailyBillingRecord, HawkerFreeQtyEntry } from '@/lib/storage';
 
 interface BillingRow {
   supplyQty: number;
@@ -19,6 +19,109 @@ interface BillingFormValues {
   date: string;
 }
 
+// ─── Free Qty Settings Modal ──────────────────────────────────────────────────
+
+interface FreeQtyModalProps {
+  hawker: Hawker;
+  onClose: () => void;
+  onSaved: (entries: HawkerFreeQtyEntry[]) => void;
+}
+
+function FreeQtyModal({ hawker, onClose, onSaved }: FreeQtyModalProps) {
+  const [freeQtys, setFreeQtys] = useState<number[]>(() => {
+    const saved = getFreeQtyForHawker(hawker.id);
+    return NEWSPAPERS.map((np) => {
+      const found = saved.find((e) => e.newspaper === np.name);
+      return found ? found.freeQty : 0;
+    });
+  });
+
+  const handleChange = (i: number, val: string) => {
+    const num = parseInt(val) || 0;
+    setFreeQtys((prev) => {
+      const next = [...prev];
+      next[i] = num;
+      return next;
+    });
+  };
+
+  const handleSave = () => {
+    const entries: HawkerFreeQtyEntry[] = NEWSPAPERS.map((np, i) => ({
+      newspaper: np.name,
+      freeQty: freeQtys[i],
+    }));
+    saveFreeQtyForHawker(hawker.id, entries);
+    onSaved(entries);
+    toast.success(`Free quantity settings saved for ${hawker.name}`);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-fade-in">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div>
+            <h3 className="text-base font-bold text-slate-900">Free PVC / Fixed Copies</h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Hawker: <span className="font-semibold text-[hsl(210,67%,23%)]">{hawker.name}</span> (ID: {hawker.id})
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors text-slate-400"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-5 py-4 space-y-1 max-h-[60vh] overflow-y-auto">
+          <p className="text-xs text-slate-500 mb-3">
+            Set the fixed free copies per newspaper for this hawker. These will auto-fill in the Free PVC column every time you open billing for this hawker.
+          </p>
+          {NEWSPAPERS.map((np, i) => (
+            <div key={`fq-${np.name}`} className="flex items-center justify-between gap-3 py-2 border-b border-slate-50 last:border-0">
+              <span className="text-sm font-medium text-slate-700 flex-1">{np.name}</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                value={freeQtys[i] || ''}
+                onChange={(e) => handleChange(i, e.target.value)}
+                placeholder="0"
+                className="w-20 text-center input-field text-sm tabular-nums"
+              />
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-[hsl(210,67%,23%)] text-white hover:bg-[hsl(210,67%,18%)] transition-colors"
+          >
+            <Save size={14} />
+            Save Settings
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
 export default function DailyBillingEntry() {
   const [hawkers, setHawkers] = useState<Hawker[]>([]);
   const [selectedHawker, setSelectedHawker] = useState<Hawker | null>(null);
@@ -26,6 +129,7 @@ export default function DailyBillingEntry() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [whatsappSending, setWhatsappSending] = useState(false);
+  const [showFreeQtyModal, setShowFreeQtyModal] = useState(false);
   const [rows, setRows] = useState<BillingRow[]>(
     NEWSPAPERS.map(() => ({ supplyQty: 0, returnQty: 0, freePvc: 0 }))
   );
@@ -87,10 +191,44 @@ export default function DailyBillingEntry() {
       String(h.id).includes(hawkerSearch)
   ).slice(0, 8);
 
+  // Auto-fill Free PVC from saved settings when hawker is selected
+  const applyFreeQtySettings = (hawker: Hawker) => {
+    const saved = getFreeQtyForHawker(hawker.id);
+    if (saved.length > 0) {
+      setRows((prev) =>
+        prev.map((row, i) => {
+          const entry = saved.find((e) => e.newspaper === NEWSPAPERS[i]?.name);
+          return entry ? { ...row, freePvc: entry.freeQty } : row;
+        })
+      );
+    }
+  };
+
   const handleSelectHawker = (hawker: Hawker) => {
     setSelectedHawker(hawker);
     setValue('hawkerId', String(hawker.id));
     setHawkerSearch('');
+    // Reset rows first, then apply saved free qty settings
+    setRows(NEWSPAPERS.map(() => ({ supplyQty: 0, returnQty: 0, freePvc: 0 })));
+    const saved = getFreeQtyForHawker(hawker.id);
+    if (saved.length > 0) {
+      setRows(
+        NEWSPAPERS.map((np, i) => {
+          const entry = saved.find((e) => e.newspaper === np.name);
+          return { supplyQty: 0, returnQty: 0, freePvc: entry ? entry.freeQty : 0 };
+        })
+      );
+    }
+  };
+
+  // When free qty settings are saved from modal, update current rows too
+  const handleFreeQtySaved = (entries: HawkerFreeQtyEntry[]) => {
+    setRows((prev) =>
+      prev.map((row, i) => {
+        const entry = entries.find((e) => e.newspaper === NEWSPAPERS[i]?.name);
+        return entry !== undefined ? { ...row, freePvc: entry.freeQty } : row;
+      })
+    );
   };
 
   const handleFormSubmit = async (formData: BillingFormValues) => {
@@ -379,6 +517,15 @@ export default function DailyBillingEntry() {
 
   return (
     <div className="space-y-5 animate-fade-in">
+      {/* Free Qty Settings Modal */}
+      {showFreeQtyModal && selectedHawker && (
+        <FreeQtyModal
+          hawker={selectedHawker}
+          onClose={() => setShowFreeQtyModal(false)}
+          onSaved={handleFreeQtySaved}
+        />
+      )}
+
       <div className="flex items-start sm:items-center justify-between gap-2">
         <div>
           <h2 className="text-xl font-bold text-slate-900">Daily Billing Entry</h2>
@@ -392,7 +539,20 @@ export default function DailyBillingEntry() {
 
       {/* Hawker Selector */}
       <div className="bg-white rounded-xl border border-[hsl(220,15%,88%)] p-4 sm:p-5 shadow-sm">
-        <h3 className="text-sm font-semibold text-slate-700 mb-3">Step 1 — Select Hawker</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-slate-700">Step 1 — Select Hawker</h3>
+          {selectedHawker && (
+            <button
+              type="button"
+              onClick={() => setShowFreeQtyModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors"
+              title="Set fixed free copies per newspaper for this hawker"
+            >
+              <Settings size={13} />
+              Free Qty Settings
+            </button>
+          )}
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="label-text" htmlFor="hawker-search">Search by Name or Hawker ID</label>
@@ -487,9 +647,16 @@ export default function DailyBillingEntry() {
 
       {/* Billing Table */}
       <div className="bg-white rounded-xl border border-[hsl(220,15%,88%)] shadow-sm overflow-hidden">
-        <div className="px-4 sm:px-5 py-4 border-b border-[hsl(220,15%,88%)]">
-          <h3 className="text-sm font-semibold text-slate-700">Step 2 — Enter Newspaper Quantities</h3>
-          <p className="text-xs text-slate-400 mt-0.5">Net Qty and Total are auto-calculated using date-based rates</p>
+        <div className="px-4 sm:px-5 py-4 border-b border-[hsl(220,15%,88%)] flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-700">Step 2 — Enter Newspaper Quantities</h3>
+            <p className="text-xs text-slate-400 mt-0.5">Net Qty and Total are auto-calculated using date-based rates</p>
+          </div>
+          {selectedHawker && NEWSPAPERS.some((np, i) => (rows[i]?.freePvc || 0) > 0) && (
+            <span className="text-xs text-amber-600 font-medium bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg">
+              Free qty auto-filled
+            </span>
+          )}
         </div>
 
         {/* Mobile card layout */}
@@ -579,6 +746,7 @@ export default function DailyBillingEntry() {
                 const total = getTotal(i);
                 const hasEntry = rows[i]?.supplyQty > 0;
                 const ratesDiffer = ratesAreDifferent(i);
+                const hasFreeQty = (rows[i]?.freePvc || 0) > 0;
                 return (
                   <tr
                     key={`billing-row-${np.name}`}
@@ -629,7 +797,7 @@ export default function DailyBillingEntry() {
                         min={0}
                         value={rows[i]?.freePvc || ''}
                         onChange={(e) => updateRow(i, 'freePvc', e.target.value)}
-                        className="w-20 text-center input-field text-sm tabular-nums"
+                        className={`w-20 text-center input-field text-sm tabular-nums ${hasFreeQty ? 'border-amber-300 bg-amber-50' : ''}`}
                         placeholder="0"
                       />
                     </td>

@@ -24,6 +24,7 @@ const KEYS = {
   SEEDED: 'bhand_seeded_v1',
   RATES: 'bhand_newspaper_rates',
   GROUPS: 'bhand_newspaper_groups',
+  FREE_QTY: 'bhand_hawker_free_qty',
 };
 
 function isBrowser() {
@@ -318,4 +319,36 @@ export function saveNewspaperGroup(group: NewspaperGroup): NewspaperGroup {
 export function deleteNewspaperGroup(id: string): void {
   const list = getNewspaperGroups().filter((g) => g.id !== id);
   write(KEYS.GROUPS, list);
+}
+
+// ─── Hawker Free Qty Settings ─────────────────────────────────────────────────
+
+export interface HawkerFreeQtyEntry {
+  newspaper: string;
+  freeQty: number;
+}
+
+export interface HawkerFreeQtySettings {
+  hawkerId: number;
+  entries: HawkerFreeQtyEntry[];
+}
+
+export function getAllFreeQtySettings(): HawkerFreeQtySettings[] {
+  return read<HawkerFreeQtySettings[]>(KEYS.FREE_QTY) ?? [];
+}
+
+export function getFreeQtyForHawker(hawkerId: number): HawkerFreeQtyEntry[] {
+  const all = getAllFreeQtySettings();
+  return all.find((s) => s.hawkerId === hawkerId)?.entries ?? [];
+}
+
+export function saveFreeQtyForHawker(hawkerId: number, entries: HawkerFreeQtyEntry[]): void {
+  const all = getAllFreeQtySettings();
+  const idx = all.findIndex((s) => s.hawkerId === hawkerId);
+  if (idx >= 0) {
+    all[idx] = { hawkerId, entries };
+  } else {
+    all.push({ hawkerId, entries });
+  }
+  write(KEYS.FREE_QTY, all);
 }
