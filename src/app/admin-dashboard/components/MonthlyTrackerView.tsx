@@ -64,7 +64,8 @@ export default function MonthlyTrackerView() {
 
   const handleReset = () => {
     resetMonthlyTracker();
-    setData([]);
+    const fresh = getMonthlyTracker();
+    setData(fresh);
     setSearch('');
     setPage(1);
     setShowConfirm(false);
@@ -84,7 +85,7 @@ export default function MonthlyTrackerView() {
               <h3 className="text-base font-bold text-slate-900">Reset Monthly Tracker?</h3>
             </div>
             <p className="text-sm text-slate-600 mb-5">
-              This will permanently clear <strong>all billing records and monthly tracker data</strong>. You will start fresh from today. This action cannot be undone.
+              This will reset the <strong>monthly tracker display to zero</strong>. Your billing records will be preserved. This action cannot be undone.
             </p>
             <div className="flex gap-3">
               <button

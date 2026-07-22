@@ -144,7 +144,6 @@ export function getMonthlyTracker(): MonthlyTrackerRow[] {
 
 export function resetMonthlyTracker(): void {
   if (!isBrowser()) return;
-  write(KEYS.BILLING, []);
   write(KEYS.MONTHLY, []);
 }
 
