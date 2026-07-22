@@ -903,6 +903,25 @@ export default function DailyBillingEntry() {
             <span className="text-sm font-semibold">Grand Total</span>
             <span className="font-mono font-bold text-lg">₹{getTotalBill().toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
           </div>
+          {/* Mobile payment bifurcation */}
+          <div className="border-t border-slate-200">
+            <div className="bg-indigo-50 px-4 py-2.5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-2 h-2 rounded-full bg-indigo-500"></span>
+                <span className="text-xs font-semibold text-indigo-700">Transfer to Company</span>
+                <span className="text-[10px] text-indigo-400">(Lokmat)</span>
+              </div>
+              <span className="font-mono font-bold text-indigo-800 text-sm">₹{getLokmtSubtotal().toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="bg-green-50 px-4 py-2.5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-2 h-2 rounded-full bg-green-500"></span>
+                <span className="text-xs font-semibold text-green-700">Cash</span>
+                <span className="text-[10px] text-green-400">(Other Newspapers)</span>
+              </div>
+              <span className="font-mono font-bold text-green-800 text-sm">₹{getOtherSubtotal().toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            </div>
+          </div>
         </div>
 
         {/* Desktop table layout */}
@@ -1057,6 +1076,31 @@ export default function DailyBillingEntry() {
                 </td>
                 <td className="px-4 py-3 text-right font-mono font-bold text-lg">
                   ₹{getTotalBill().toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </td>
+              </tr>
+              {/* Desktop payment bifurcation */}
+              <tr className="bg-indigo-50 border-t border-indigo-200">
+                <td colSpan={7} className="px-4 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-2 h-2 rounded-full bg-indigo-500"></span>
+                    <span className="text-xs font-semibold text-indigo-700">Transfer to Company</span>
+                    <span className="text-[10px] text-indigo-400 bg-indigo-100 border border-indigo-200 px-1.5 py-0.5 rounded-full">Lokmat</span>
+                  </div>
+                </td>
+                <td colSpan={2} className="px-4 py-2.5 text-right">
+                  <span className="font-mono font-bold text-indigo-800 text-sm">₹{getLokmtSubtotal().toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                </td>
+              </tr>
+              <tr className="bg-green-50 border-t border-green-200">
+                <td colSpan={7} className="px-4 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-2 h-2 rounded-full bg-green-500"></span>
+                    <span className="text-xs font-semibold text-green-700">Cash</span>
+                    <span className="text-[10px] text-green-400 bg-green-100 border border-green-200 px-1.5 py-0.5 rounded-full">Other Newspapers</span>
+                  </div>
+                </td>
+                <td colSpan={2} className="px-4 py-2.5 text-right">
+                  <span className="font-mono font-bold text-green-800 text-sm">₹{getOtherSubtotal().toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                 </td>
               </tr>
             </tfoot>
