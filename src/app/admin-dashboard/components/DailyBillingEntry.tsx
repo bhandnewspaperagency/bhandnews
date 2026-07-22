@@ -322,6 +322,27 @@ export default function DailyBillingEntry() {
     });
   };
 
+  const handleSendSMS = () => {
+    const date = billDate ?? today;
+    const grandTotal = getTotalBill();
+    const transferToCompany = getLokmtSubtotal();
+    const cash = getOtherSubtotal();
+    const formattedDate = new Date(date).toLocaleDateString('en-IN');
+    const hawkerName = selectedHawker?.name ?? 'N/A';
+
+    const message =
+      `Bhand Newspaper Agency - Daily Billing\n` +
+      `Date: ${formattedDate}\n` +
+      `Hawker: ${hawkerName}\n` +
+      `----------------------------\n` +
+      `Grand Total: Rs.${grandTotal.toFixed(2)}\n` +
+      `Transfer to Company (Lokmat): Rs.${transferToCompany.toFixed(2)}\n` +
+      `Cash: Rs.${cash.toFixed(2)}`;
+
+    const smsUrl = `sms:8830667147?body=${encodeURIComponent(message)}`;
+    window.open(smsUrl, '_self');
+  };
+
   const handleReset = () => {
     setSelectedHawker(null);
     setRows(NEWSPAPERS.map(() => ({ supplyQty: 0, returnQty: 0, freePvc: 0 })));
@@ -1158,6 +1179,24 @@ export default function DailyBillingEntry() {
               <MessageSquare size={15} />
             )}
             Send WhatsApp
+          </button>
+          <button
+            type="button"
+            onClick={handleSendSMS}
+            disabled={!selectedHawker}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold border border-[hsl(220,15%,88%)] text-slate-600 hover:bg-slate-50 transition-colors min-h-[44px]"
+          >
+            <Send size={15} />
+            Send SMS
+          </button>
+          <button
+            type="button"
+            onClick={handleSendSMS}
+            disabled={!selectedHawker}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors min-h-[44px]"
+          >
+            <MessageSquare size={15} />
+            Send SMS
           </button>
           <button
             type="button"
