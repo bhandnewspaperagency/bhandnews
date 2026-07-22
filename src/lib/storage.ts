@@ -123,6 +123,18 @@ export function getTodayBilling(date: string): DailyBillingRecord[] {
   return getBillingRecords().filter((b) => b.date === date);
 }
 
+export function getExistingBillingRecord(hawkerId: number, date: string): DailyBillingRecord | null {
+  const records = getBillingRecords();
+  return records.find((b) => b.hawkerId === hawkerId && b.date === date) ?? null;
+}
+
+export function deleteBillingRecordForHawkerDate(hawkerId: number, date: string): void {
+  const list = getBillingRecords();
+  const filtered = list.filter((b) => !(b.hawkerId === hawkerId && b.date === date));
+  write(KEYS.BILLING, filtered);
+  rebuildMonthlyTracker();
+}
+
 // ─── Monthly Tracker ─────────────────────────────────────────────────────────
 
 export function getMonthlyTracker(): MonthlyTrackerRow[] {

@@ -4,7 +4,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { Search, Send, CheckCircle2, AlertCircle, MessageSquare, ChevronDown, Printer, Info, Settings, X, Save } from 'lucide-react';
-import { getHawkers, saveBillingRecord, NEWSPAPERS, getRateForDate, getPreviousDayRate, getFreeQtyForHawker, saveFreeQtyForHawker } from '@/lib/storage';
+import { getHawkers, saveBillingRecord, NEWSPAPERS, getRateForDate, getPreviousDayRate, getFreeQtyForHawker, saveFreeQtyForHawker, getExistingBillingRecord, deleteBillingRecordForHawkerDate } from '@/lib/storage';
 import type { Hawker, DailyBillingRecord, HawkerFreeQtyEntry } from '@/lib/storage';
 
 interface BillingRow {
@@ -131,6 +131,8 @@ export default function DailyBillingEntry() {
   const [whatsappSending, setWhatsappSending] = useState(false);
   const [showFreeQtyModal, setShowFreeQtyModal] = useState(false);
   const [lokmtPaymentType, setLokmtPaymentType] = useState<'Transfer' | 'Cash'>('Transfer');
+  const [isDataPreloaded, setIsDataPreloaded] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [rows, setRows] = useState<BillingRow[]>(
     NEWSPAPERS.map(() => ({ supplyQty: 0, returnQty: 0, freePvc: 0 }))
   );
@@ -163,6 +165,38 @@ export default function DailyBillingEntry() {
     setSupplyRates(sRates);
     setReturnRates(rRates);
   }, [billDate]);
+
+  // When hawker or date changes, try to load existing saved record
+  useEffect(() => {
+    if (!selectedHawker || !billDate) return;
+    const existing = getExistingBillingRecord(selectedHawker.id, billDate);
+    if (existing && existing.entries.length > 0) {
+      // Pre-populate rows from saved record
+      const newRows = NEWSPAPERS.map((np, i) => {
+        const entry = existing.entries.find((e) => e.newspaper === np.name);
+        if (entry) {
+          return {
+            supplyQty: entry.supplyQty,
+            returnQty: entry.returnQty,
+            freePvc: entry.netQty !== undefined
+              ? Math.max(0, entry.supplyQty - entry.returnQty - entry.netQty)
+              : 0,
+          };
+        }
+        // fallback: apply free qty settings
+        const saved = getFreeQtyForHawker(selectedHawker.id);
+        const freeEntry = saved.find((e) => e.newspaper === np.name);
+        return { supplyQty: 0, returnQty: 0, freePvc: freeEntry ? freeEntry.freeQty : 0 };
+      });
+      setRows(newRows);
+      setValue('paymentType', existing.paymentType as 'Cash' | 'UPI' | 'Credit');
+      setIsDataPreloaded(true);
+      setSubmitted(true);
+    } else {
+      setIsDataPreloaded(false);
+      setSubmitted(false);
+    }
+  }, [selectedHawker, billDate]);
 
   const updateRow = (index: number, field: 'supplyQty' | 'returnQty' | 'freePvc', value: string) => {
     const numVal = parseInt(value) || 0;
@@ -214,17 +248,18 @@ export default function DailyBillingEntry() {
     setSelectedHawker(hawker);
     setValue('hawkerId', String(hawker.id));
     setHawkerSearch('');
+    setIsDataPreloaded(false);
+    setSubmitted(false);
+    setShowResetConfirm(false);
     // Reset rows first, then apply saved free qty settings
-    setRows(NEWSPAPERS.map(() => ({ supplyQty: 0, returnQty: 0, freePvc: 0 })));
     const saved = getFreeQtyForHawker(hawker.id);
-    if (saved.length > 0) {
-      setRows(
-        NEWSPAPERS.map((np, i) => {
-          const entry = saved.find((e) => e.newspaper === np.name);
-          return { supplyQty: 0, returnQty: 0, freePvc: entry ? entry.freeQty : 0 };
-        })
-      );
-    }
+    setRows(
+      NEWSPAPERS.map((np, i) => {
+        const entry = saved.find((e) => e.newspaper === np.name);
+        return { supplyQty: 0, returnQty: 0, freePvc: entry ? entry.freeQty : 0 };
+      })
+    );
+    // The useEffect for selectedHawker+billDate will fire and load existing record if any
   };
 
   // When free qty settings are saved from modal, update current rows too
@@ -255,8 +290,9 @@ export default function DailyBillingEntry() {
       total: getTotal(i),
     })).filter((e) => e.supplyQty > 0);
 
+    // Use a stable ID based on hawker+date so re-saving updates the same record
     const record: DailyBillingRecord = {
-      id: `bill-${formData.date.replace(/-/g, '')}-${selectedHawker.id}-${Date.now()}`,
+      id: `bill-${formData.date.replace(/-/g, '')}-${selectedHawker.id}`,
       hawkerId: selectedHawker.id,
       hawkerName: selectedHawker.name,
       date: formData.date,
@@ -270,6 +306,7 @@ export default function DailyBillingEntry() {
     saveBillingRecord(record);
     setIsSubmitting(false);
     setSubmitted(true);
+    setIsDataPreloaded(true);
     toast.success(`Bill saved for ${selectedHawker.name} — ₹${getTotalBill().toLocaleString('en-IN', { minimumFractionDigits: 2 })}`);
   };
 
@@ -287,7 +324,27 @@ export default function DailyBillingEntry() {
     setSelectedHawker(null);
     setRows(NEWSPAPERS.map(() => ({ supplyQty: 0, returnQty: 0, freePvc: 0 })));
     setSubmitted(false);
+    setIsDataPreloaded(false);
+    setShowResetConfirm(false);
     setValue('hawkerId', '');
+  };
+
+  // Reset only the current day's data for the selected hawker
+  const handleResetDayData = () => {
+    if (!selectedHawker || !billDate) return;
+    deleteBillingRecordForHawkerDate(selectedHawker.id, billDate);
+    // Restore rows to free qty defaults only
+    const saved = getFreeQtyForHawker(selectedHawker.id);
+    setRows(
+      NEWSPAPERS.map((np) => {
+        const entry = saved.find((e) => e.newspaper === np.name);
+        return { supplyQty: 0, returnQty: 0, freePvc: entry ? entry.freeQty : 0 };
+      })
+    );
+    setSubmitted(false);
+    setIsDataPreloaded(false);
+    setShowResetConfirm(false);
+    toast.success(`Billing data reset for ${selectedHawker.name} on ${new Date(billDate).toLocaleDateString('en-IN')}`);
   };
 
   const handlePrint = () => {
@@ -532,6 +589,41 @@ export default function DailyBillingEntry() {
         />
       )}
 
+      {/* Reset Day Data Confirmation */}
+      {showResetConfirm && selectedHawker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-fade-in">
+            <div className="px-5 py-4 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900">Reset Day Data?</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                This will permanently clear the saved billing data for{' '}
+                <span className="font-semibold text-[hsl(210,67%,23%)]">{selectedHawker.name}</span>{' '}
+                on{' '}
+                <span className="font-semibold">{new Date(billDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>.
+                You can re-enter fresh figures after resetting.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-4">
+              <button
+                type="button"
+                onClick={() => setShowResetConfirm(false)}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleResetDayData}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 text-white hover:bg-red-700 transition-colors"
+              >
+                <X size={14} />
+                Yes, Reset
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-start sm:items-center justify-between gap-2">
         <div>
           <h2 className="text-xl font-bold text-slate-900">Daily Billing Entry</h2>
@@ -639,6 +731,27 @@ export default function DailyBillingEntry() {
           </div>
         </div>
       </div>
+
+      {/* Preloaded data banner */}
+      {isDataPreloaded && selectedHawker && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-3 flex items-center gap-2.5">
+          <CheckCircle2 size={15} className="text-green-600 flex-shrink-0" />
+          <p className="text-xs text-green-800 flex-1">
+            <strong>Saved data loaded</strong> — Showing previously saved figures for{' '}
+            <span className="font-semibold">{selectedHawker.name}</span> on{' '}
+            {new Date(billDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}.
+            Edit any field and re-save, or use <strong>Reset Day Data</strong> to start fresh.
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowResetConfirm(true)}
+            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-colors"
+          >
+            <X size={12} />
+            Reset Day Data
+          </button>
+        </div>
+      )}
 
       {/* Rate Info Banner */}
       {hasRateDifference && (
@@ -936,8 +1049,18 @@ export default function DailyBillingEntry() {
             onClick={handleReset}
             className="flex-1 sm:flex-none px-4 py-2.5 rounded-lg text-sm font-medium text-slate-600 border border-[hsl(220,15%,88%)] hover:bg-slate-50 transition-colors min-h-[44px]"
           >
-            Reset
+            Clear Hawker
           </button>
+          {isDataPreloaded && selectedHawker && (
+            <button
+              type="button"
+              onClick={() => setShowResetConfirm(true)}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold border border-red-200 text-red-600 hover:bg-red-50 transition-colors min-h-[44px]"
+            >
+              <X size={14} />
+              Reset Day Data
+            </button>
+          )}
           <button
             type="button"
             onClick={handleSendWhatsApp}
@@ -970,7 +1093,7 @@ export default function DailyBillingEntry() {
             ) : (
               <Send size={15} />
             )}
-            {isSubmitting ? 'Saving…' : 'Save Bill'}
+            {isSubmitting ? 'Saving…' : submitted ? 'Update Bill' : 'Save Bill'}
           </button>
         </div>
       </div>
