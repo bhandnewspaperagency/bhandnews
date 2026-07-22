@@ -142,6 +142,12 @@ export function getMonthlyTracker(): MonthlyTrackerRow[] {
   return read<MonthlyTrackerRow[]>(KEYS.MONTHLY) ?? MOCK_MONTHLY_TRACKER;
 }
 
+export function resetMonthlyTracker(): void {
+  if (!isBrowser()) return;
+  write(KEYS.BILLING, []);
+  write(KEYS.MONTHLY, []);
+}
+
 function rebuildMonthlyTracker(): void {
   const billing = getBillingRecords();
   const hawkers = getHawkers();
