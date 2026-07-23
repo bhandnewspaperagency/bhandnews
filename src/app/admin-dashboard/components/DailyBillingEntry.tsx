@@ -211,7 +211,7 @@ export default function DailyBillingEntry() {
 
   const getNetQty = (i: number) => Math.max(0, (rows[i]?.supplyQty || 0) - (rows[i]?.freePvc || 0));
 
-  // Total = (NetQty × today's rate) - (ReturnQty × previous day's rate)
+  // Total = (NetQty × bill date's rate) - (ReturnQty × previous day's rate)
   const getTotal = (i: number) => {
     const netQty = getNetQty(i);
     const ret = (rows[i]?.returnQty || 0) * returnRates[i];
@@ -810,7 +810,7 @@ export default function DailyBillingEntry() {
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex gap-2.5">
           <Info size={15} className="text-blue-500 flex-shrink-0 mt-0.5" />
           <p className="text-xs text-blue-700">
-            <strong>Rate change detected:</strong> Supply qty uses today&apos;s rate; return qty uses the previous day&apos;s rate.
+            <strong>Rate change detected:</strong> Supply qty uses the bill date&apos;s rate; return qty uses the previous day&apos;s rate.
             Columns show both rates where they differ.
           </p>
         </div>
@@ -952,7 +952,7 @@ export default function DailyBillingEntry() {
               <tr className="border-b border-[hsl(220,15%,88%)]">
                 <th className="table-header text-left w-8">Sr.</th>
                 <th className="table-header text-left">Newspaper</th>
-                <th className="table-header text-right">Supply Rate (₹)<br/><span className="font-normal normal-case text-slate-400 text-[10px]">(today)</span></th>
+                <th className="table-header text-right">Supply Rate (₹)<br/><span className="font-normal normal-case text-slate-400 text-[10px]">(bill date)</span></th>
                 <th className="table-header text-right">Return Rate (₹)<br/><span className="font-normal normal-case text-slate-400 text-[10px]">(prev day)</span></th>
                 <th className="table-header text-center">Supply Qty<br/><span className="font-normal normal-case text-slate-400">(अंक)</span></th>
                 <th className="table-header text-center">Return<br/><span className="font-normal normal-case text-slate-400">(परत)</span></th>
