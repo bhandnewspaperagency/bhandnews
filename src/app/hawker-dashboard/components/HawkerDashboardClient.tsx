@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Newspaper, LogOut, IndianRupee, Calendar, BookOpen, CheckCircle2, Clock, AlertTriangle, Printer } from 'lucide-react';
-import { getSession, clearSession, getBillingByHawker, getMonthlyTracker, getHawkerById } from '@/lib/storage';
+import { getSession, clearSession, getBillingByHawker, getMonthlyTracker, getHawkerById, restoreFromBackupIfNeeded } from '@/lib/storage';
 import type { DailyBillingRecord, MonthlyTrackerRow, Hawker } from '@/lib/storage';
 import HawkerBillingTable from './HawkerBillingTable';
 import HawkerMonthlyView from './HawkerMonthlyView';
@@ -16,20 +16,22 @@ export default function HawkerDashboardClient() {
   const [myMonthly, setMyMonthly] = useState<MonthlyTrackerRow | undefined>(undefined);
 
   useEffect(() => {
-    const session = getSession();
-    if (!session || session.role !== 'hawker' || !session.hawkerId) {
-      router.push('/sign-up-login-screen');
-      return;
-    }
-    const h = getHawkerById(session.hawkerId);
-    if (!h) {
-      router.push('/sign-up-login-screen');
-      return;
-    }
-    setHawker(h);
-    setMyBills(getBillingByHawker(session.hawkerId));
-    const monthly = getMonthlyTracker().find((m) => m.hawkerId === session.hawkerId);
-    setMyMonthly(monthly);
+    restoreFromBackupIfNeeded().then(() => {
+      const session = getSession();
+      if (!session || session.role !== 'hawker' || !session.hawkerId) {
+        router.push('/sign-up-login-screen');
+        return;
+      }
+      const h = getHawkerById(session.hawkerId);
+      if (!h) {
+        router.push('/sign-up-login-screen');
+        return;
+      }
+      setHawker(h);
+      setMyBills(getBillingByHawker(session.hawkerId));
+      const monthly = getMonthlyTracker().find((m) => m.hawkerId === session.hawkerId);
+      setMyMonthly(monthly);
+    });
   }, [router]);
 
   const handleLogout = () => {

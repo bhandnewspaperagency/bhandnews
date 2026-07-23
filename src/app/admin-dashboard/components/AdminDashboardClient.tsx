@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import AdminSidebar from '@/components/AdminSidebar';
 import AdminTopbar from './AdminTopbar';
 import DashboardOverview from './DashboardOverview';
@@ -14,12 +14,21 @@ import CopiesTrackerView from './CopiesTrackerView';
 import NewspaperGroups from './NewspaperGroups';
 import BackupRestore from './BackupRestore';
 import SettingsView from './SettingsView';
+import { restoreFromBackupIfNeeded } from '@/lib/storage';
 
 export default function AdminDashboardClient() {
   const [activeSection, setActiveSection] = useState('dashboard');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [restored, setRestored] = useState(false);
+
+  // On mount: restore any data from IndexedDB backup before rendering content
+  useEffect(() => {
+    restoreFromBackupIfNeeded().finally(() => setRestored(true));
+  }, []);
 
   const renderContent = () => {
+    if (!restored) return null; // wait for backup restore before rendering
+
     switch (activeSection) {
       case 'dashboard': return <DashboardOverview onNavigate={setActiveSection} />;
       case 'billing': return <DailyBillingEntry />;

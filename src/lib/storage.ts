@@ -1,17 +1,6 @@
 'use client';
 
-import {
-  Hawker,
-  DailyBillingRecord,
-  MonthlyTrackerRow,
-  MASTER_DATA,
-  MOCK_DAILY_BILLING,
-  MOCK_MONTHLY_TRACKER,
-  NEWSPAPERS,
-  MONTHLY_CHART_DATA,
-  NEWSPAPER_VOLUME_DATA,
-  PAYMENT_STATUS_DATA,
-} from './mockData';
+import { Hawker, DailyBillingRecord, MonthlyTrackerRow, MASTER_DATA, NEWSPAPERS, MONTHLY_CHART_DATA, NEWSPAPER_VOLUME_DATA, PAYMENT_STATUS_DATA,  } from './mockData';
 
 export type { Hawker, DailyBillingRecord, MonthlyTrackerRow };
 export { NEWSPAPERS, MONTHLY_CHART_DATA, NEWSPAPER_VOLUME_DATA, PAYMENT_STATUS_DATA };
@@ -21,11 +10,68 @@ const KEYS = {
   BILLING: 'bhand_billing',
   MONTHLY: 'bhand_monthly',
   AUTH: 'bhand_auth_session',
-  SEEDED: 'bhand_seeded_v1',
+  SEEDED: 'bhand_seeded_v2',   // bumped version so old seed flag is ignored
   RATES: 'bhand_newspaper_rates',
   GROUPS: 'bhand_newspaper_groups',
   FREE_QTY: 'bhand_hawker_free_qty',
+  COPIES: 'bhand_copies_tracker',
 };
+
+// ─── IndexedDB Backup ─────────────────────────────────────────────────────────
+// All writes are mirrored to IndexedDB so data survives localStorage clears.
+
+const IDB_NAME = 'bhand_backup_db';
+const IDB_STORE = 'kv_store';
+const IDB_VERSION = 1;
+
+let _idbReady: Promise<IDBDatabase> | null = null;
+
+function openIDB(): Promise<IDBDatabase> {
+  if (_idbReady) return _idbReady;
+  _idbReady = new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') {
+      reject(new Error('IndexedDB not available'));
+      return;
+    }
+    const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore(IDB_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return _idbReady;
+}
+
+async function idbWrite(key: string, value: string): Promise<void> {
+  try {
+    const db = await openIDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).put(value, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve(); // silent fail
+    });
+  } catch {
+    // IndexedDB not available — silently ignore
+  }
+}
+
+async function idbRead(key: string): Promise<string | null> {
+  try {
+    const db = await openIDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const req = tx.objectStore(IDB_STORE).get(key);
+      req.onsuccess = () => resolve(req.result ?? null);
+      req.onerror = () => resolve(null);
+    });
+  } catch {
+    return null;
+  }
+}
+
+// ─── Core Read / Write ────────────────────────────────────────────────────────
 
 function isBrowser() {
   return typeof window !== 'undefined';
@@ -41,22 +87,76 @@ function read<T>(key: string): T | null {
   }
 }
 
+/**
+ * Write to localStorage AND mirror to IndexedDB backup.
+ * IndexedDB is the safety net — if localStorage is ever cleared,
+ * the next call to restoreFromBackupIfNeeded() will recover all data.
+ */
 function write<T>(key: string, value: T): void {
   if (!isBrowser()) return;
   try {
-    localStorage.setItem(key, JSON.stringify(value));
+    const serialised = JSON.stringify(value);
+    localStorage.setItem(key, serialised);
+    // Mirror to IndexedDB asynchronously (fire-and-forget)
+    idbWrite(key, serialised).catch(() => {});
   } catch {
-    // storage quota exceeded — silently ignore
+    // storage quota exceeded — still try IndexedDB
+    idbWrite(key, JSON.stringify(value)).catch(() => {});
   }
 }
 
+/**
+ * Restore all persisted keys from IndexedDB into localStorage.
+ * Called once on app boot — recovers data if localStorage was cleared.
+ */
+export async function restoreFromBackupIfNeeded(): Promise<void> {
+  if (!isBrowser()) return;
+
+  const persistedKeys = [
+    KEYS.HAWKERS,
+    KEYS.BILLING,
+    KEYS.MONTHLY,
+    KEYS.RATES,
+    KEYS.GROUPS,
+    KEYS.FREE_QTY,
+    KEYS.COPIES,
+    KEYS.SEEDED,
+  ];
+
+  for (const key of persistedKeys) {
+    // Only restore if localStorage is missing this key
+    if (localStorage.getItem(key) === null) {
+      const backup = await idbRead(key);
+      if (backup !== null) {
+        try {
+          localStorage.setItem(key, backup);
+        } catch {
+          // quota — skip
+        }
+      }
+    }
+  }
+}
+
+// ─── Seeding ──────────────────────────────────────────────────────────────────
+/**
+ * SAFE seed: only seeds hawkers if none exist at all.
+ * NEVER overwrites billing records, Free PVC settings, or any other real data.
+ */
 export function seedIfNeeded(): void {
   if (!isBrowser()) return;
-  if (localStorage.getItem(KEYS.SEEDED)) return;
-  write(KEYS.HAWKERS, MASTER_DATA);
-  write(KEYS.BILLING, MOCK_DAILY_BILLING);
-  write(KEYS.MONTHLY, MOCK_MONTHLY_TRACKER);
-  localStorage.setItem(KEYS.SEEDED, '1');
+
+  // Seed hawkers only if the hawkers key is completely absent
+  if (localStorage.getItem(KEYS.HAWKERS) === null) {
+    write(KEYS.HAWKERS, MASTER_DATA);
+  }
+
+  // Mark as seeded so we don't re-check unnecessarily
+  if (!localStorage.getItem(KEYS.SEEDED)) {
+    localStorage.setItem(KEYS.SEEDED, '1');
+    // Also persist the seed flag to IndexedDB
+    idbWrite(KEYS.SEEDED, '1').catch(() => {});
+  }
 }
 
 // ─── Hawkers ────────────────────────────────────────────────────────────────
@@ -98,8 +198,7 @@ export function getHawkerById(id: number): Hawker | undefined {
 // ─── Billing ─────────────────────────────────────────────────────────────────
 
 export function getBillingRecords(): DailyBillingRecord[] {
-  seedIfNeeded();
-  return read<DailyBillingRecord[]>(KEYS.BILLING) ?? MOCK_DAILY_BILLING;
+  return read<DailyBillingRecord[]>(KEYS.BILLING) ?? [];
 }
 
 export function saveBillingRecord(record: DailyBillingRecord): void {
@@ -138,8 +237,7 @@ export function deleteBillingRecordForHawkerDate(hawkerId: number, date: string)
 // ─── Monthly Tracker ─────────────────────────────────────────────────────────
 
 export function getMonthlyTracker(): MonthlyTrackerRow[] {
-  seedIfNeeded();
-  return read<MonthlyTrackerRow[]>(KEYS.MONTHLY) ?? MOCK_MONTHLY_TRACKER;
+  return read<MonthlyTrackerRow[]>(KEYS.MONTHLY) ?? [];
 }
 
 export function resetMonthlyTracker(): void {
@@ -231,37 +329,23 @@ export interface DailyRateRecord {
   rates: NewspaperRateEntry[];
 }
 
-/**
- * Get all daily rate records, sorted by date descending.
- */
 export function getAllRates(): DailyRateRecord[] {
   return read<DailyRateRecord[]>(KEYS.RATES) ?? [];
 }
 
-/**
- * Get the rate for a specific newspaper on a specific date.
- * Falls back to the most recent rate before that date, then to the default NEWSPAPERS rate.
- */
 export function getRateForDate(newspaper: string, date: string): number {
   const all = getAllRates();
-  // Sort descending by date
   const sorted = [...all].sort((a, b) => b.date.localeCompare(a.date));
-  // Find the most recent record on or before the given date
   for (const record of sorted) {
     if (record.date <= date) {
       const entry = record.rates.find((r) => r.newspaper === newspaper);
       if (entry !== undefined) return entry.rate;
     }
   }
-  // Fallback to default rate from NEWSPAPERS
   const np = NEWSPAPERS.find((n) => n.name === newspaper);
   return np?.rate ?? 0;
 }
 
-/**
- * Get the most recent rate record strictly BEFORE the given date (for return qty calculation).
- * This represents the rate on the day the papers were originally supplied.
- */
 export function getPreviousDayRate(newspaper: string, date: string): number {
   const all = getAllRates();
   const sorted = [...all].sort((a, b) => b.date.localeCompare(a.date));
@@ -271,13 +355,9 @@ export function getPreviousDayRate(newspaper: string, date: string): number {
       if (entry !== undefined) return entry.rate;
     }
   }
-  // Fallback: same as current date rate
   return getRateForDate(newspaper, date);
 }
 
-/**
- * Save or update rates for a specific date.
- */
 export function saveRatesForDate(date: string, rates: NewspaperRateEntry[]): void {
   const all = getAllRates();
   const idx = all.findIndex((r) => r.date === date);
@@ -289,17 +369,11 @@ export function saveRatesForDate(date: string, rates: NewspaperRateEntry[]): voi
   write(KEYS.RATES, all);
 }
 
-/**
- * Delete rate record for a specific date.
- */
 export function deleteRatesForDate(date: string): void {
   const all = getAllRates().filter((r) => r.date !== date);
   write(KEYS.RATES, all);
 }
 
-/**
- * Get rates for a specific date (exact match).
- */
 export function getRatesForDate(date: string): NewspaperRateEntry[] | null {
   const record = getAllRates().find((r) => r.date === date);
   return record?.rates ?? null;
@@ -310,8 +384,8 @@ export function getRatesForDate(date: string): NewspaperRateEntry[] | null {
 export interface NewspaperGroup {
   id: string;
   name: string;
-  newspapers: string[]; // list of newspaper names
-  color?: string; // optional color tag
+  newspapers: string[];
+  color?: string;
 }
 
 export function getNewspaperGroups(): NewspaperGroup[] {
@@ -368,4 +442,40 @@ export function saveFreeQtyForHawker(hawkerId: number, entries: HawkerFreeQtyEnt
     all.push({ hawkerId, entries });
   }
   write(KEYS.FREE_QTY, all);
+}
+
+// ─── Copies Tracker ───────────────────────────────────────────────────────────
+
+export interface CopiesEntry {
+  newspaper: string;
+  supply: number;
+  returned: number;
+}
+
+export interface CopiesRecord {
+  id: string;
+  hawkerId: number;
+  hawkerName: string;
+  date: string;
+  entries: CopiesEntry[];
+}
+
+export function getCopiesRecords(): CopiesRecord[] {
+  return read<CopiesRecord[]>(KEYS.COPIES) ?? [];
+}
+
+export function saveCopiesRecord(record: CopiesRecord): void {
+  const list = getCopiesRecords();
+  const idx = list.findIndex((r) => r.id === record.id);
+  if (idx >= 0) {
+    list[idx] = record;
+  } else {
+    list.push(record);
+  }
+  write(KEYS.COPIES, list);
+}
+
+export function deleteCopiesRecord(id: string): void {
+  const list = getCopiesRecords().filter((r) => r.id !== id);
+  write(KEYS.COPIES, list);
 }
