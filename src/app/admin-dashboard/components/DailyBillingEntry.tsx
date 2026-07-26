@@ -142,7 +142,14 @@ export default function DailyBillingEntry() {
   const [supplyRates, setSupplyRates] = useState<number[]>([]);
   const [returnRates, setReturnRates] = useState<number[]>([]);
 
-  const today = new Date().toISOString().split('T')[0];
+  // Use local date (not UTC) to avoid IST timezone shift
+  const today = (() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  })();
 
   // Load hawkers and dynamic newspaper list on mount
   useEffect(() => {
@@ -150,8 +157,16 @@ export default function DailyBillingEntry() {
     const npList = getNewspaperList();
     setNewspapers(npList);
     setRows(npList.map(() => ({ supplyQty: 0, returnQty: 0, freePvc: 0 })));
-    setSupplyRates(npList.map((np) => np.rate));
-    setReturnRates(npList.map((np) => np.rate));
+    // Initialize rates from Rate Management for today
+    const todayDate = (() => {
+      const d = new Date();
+      const y = d.getFullYear();
+      const mo = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${mo}-${day}`;
+    })();
+    setSupplyRates(npList.map((np) => getRateForDate(np.name, todayDate)));
+    setReturnRates(npList.map((np) => getPreviousDayRate(np.name, todayDate)));
   }, []);
 
   const { register, handleSubmit, setValue, watch } = useForm<BillingFormValues>({

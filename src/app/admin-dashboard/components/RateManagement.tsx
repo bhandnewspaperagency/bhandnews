@@ -8,9 +8,9 @@ import {
   saveRatesForDate,
   deleteRatesForDate,
   getRatesForDate,
-  NEWSPAPERS,
+  getNewspaperList,
 } from '@/lib/storage';
-import type { NewspaperRateEntry } from '@/lib/storage';
+import type { NewspaperRateEntry, NewspaperEntry } from '@/lib/storage';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -108,11 +108,15 @@ export default function RateManagement() {
   // all saved rate records (for lookup)
   const [, setAllRates] = useState<ReturnType<typeof getAllRates>>([]);
 
+  // dynamic newspaper list
+  const [newspapers, setNewspapers] = useState<NewspaperEntry[]>([]);
+
   // week dates (Mon…Sun)
   const weekDates: string[] = Array.from({ length: 7 }, (_, i) => toISO(addDays(weekStart, i)));
 
   const reload = useCallback(() => {
     setAllRates(getAllRates());
+    setNewspapers(getNewspaperList());
   }, []);
 
   useEffect(() => { reload(); }, [reload]);
@@ -125,7 +129,9 @@ export default function RateManagement() {
       const entry = saved.find((r) => r.newspaper === newspaper);
       if (entry) return entry.rate;
     }
-    return NEWSPAPERS.find((n) => n.name === newspaper)?.rate ?? 0;
+    // Fall back to dynamic newspaper default rate
+    const np = newspapers.find((n) => n.name === newspaper);
+    return np?.rate ?? 0;
   };
 
   const hasCustomRates = (dateISO: string): boolean => {
@@ -135,7 +141,7 @@ export default function RateManagement() {
   // ── edit helpers ──────────────────────────────────────────────────────────
   const startEdit = (dateISO: string) => {
     const inputs: Record<string, string> = {};
-    NEWSPAPERS.forEach((np) => {
+    newspapers.forEach((np) => {
       inputs[np.name] = String(getRateValue(np.name, dateISO));
     });
     setRateInputs(inputs);
@@ -149,7 +155,7 @@ export default function RateManagement() {
 
   const saveEdit = () => {
     if (!editingDay) return;
-    const rates: NewspaperRateEntry[] = NEWSPAPERS.map((np) => ({
+    const rates: NewspaperRateEntry[] = newspapers.map((np) => ({
       newspaper: np.name,
       rate: parseFloat(rateInputs[np.name] || '0') || 0,
     }));
@@ -285,9 +291,9 @@ export default function RateManagement() {
               </tr>
             </thead>
             <tbody>
-              {NEWSPAPERS.map((np, npIdx) => (
+              {newspapers.map((np, npIdx) => (
                 <tr
-                  key={np.name}
+                  key={np.id}
                   className={`border-b border-[hsl(220,15%,93%)] ${npIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}
                 >
                   {/* Newspaper name — sticky */}

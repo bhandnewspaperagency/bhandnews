@@ -344,6 +344,9 @@ export function getRateForDate(newspaper: string, date: string): number {
       if (entry !== undefined) return entry.rate;
     }
   }
+  // Fall back to dynamic newspaper list rate, then static NEWSPAPERS
+  const dynamicNp = getNewspaperList().find((n) => n.name === newspaper);
+  if (dynamicNp) return dynamicNp.rate;
   const np = NEWSPAPERS.find((n) => n.name === newspaper);
   return np?.rate ?? 0;
 }
