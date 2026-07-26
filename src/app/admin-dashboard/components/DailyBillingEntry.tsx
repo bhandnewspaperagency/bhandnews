@@ -4,8 +4,8 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { Search, Send, CheckCircle2, AlertCircle, MessageSquare, ChevronDown, Printer, Info, Settings, X, Save, Trash2 } from 'lucide-react';
-import { getHawkers, saveBillingRecord, NEWSPAPERS, getRateForDate, getPreviousDayRate, getFreeQtyForHawker, saveFreeQtyForHawker, getExistingBillingRecord, deleteBillingRecordForHawkerDate } from '@/lib/storage';
-import type { Hawker, DailyBillingRecord, HawkerFreeQtyEntry } from '@/lib/storage';
+import { getHawkers, saveBillingRecord, getRateForDate, getPreviousDayRate, getFreeQtyForHawker, saveFreeQtyForHawker, getExistingBillingRecord, deleteBillingRecordForHawkerDate, getNewspaperList } from '@/lib/storage';
+import type { Hawker, DailyBillingRecord, HawkerFreeQtyEntry, NewspaperEntry } from '@/lib/storage';
 import PinModal from './PinModal';
 
 interface BillingRow {
@@ -24,14 +24,15 @@ interface BillingFormValues {
 
 interface FreeQtyModalProps {
   hawker: Hawker;
+  newspapers: NewspaperEntry[];
   onClose: () => void;
   onSaved: (entries: HawkerFreeQtyEntry[]) => void;
 }
 
-function FreeQtyModal({ hawker, onClose, onSaved }: FreeQtyModalProps) {
+function FreeQtyModal({ hawker, newspapers, onClose, onSaved }: FreeQtyModalProps) {
   const [freeQtys, setFreeQtys] = useState<number[]>(() => {
     const saved = getFreeQtyForHawker(hawker.id);
-    return NEWSPAPERS.map((np) => {
+    return newspapers.map((np) => {
       const found = saved.find((e) => e.newspaper === np.name);
       return found ? found.freeQty : 0;
     });
@@ -47,7 +48,7 @@ function FreeQtyModal({ hawker, onClose, onSaved }: FreeQtyModalProps) {
   };
 
   const handleSave = () => {
-    const entries: HawkerFreeQtyEntry[] = NEWSPAPERS.map((np, i) => ({
+    const entries: HawkerFreeQtyEntry[] = newspapers.map((np, i) => ({
       newspaper: np.name,
       freeQty: freeQtys[i],
     }));
@@ -82,8 +83,8 @@ function FreeQtyModal({ hawker, onClose, onSaved }: FreeQtyModalProps) {
           <p className="text-xs text-slate-500 mb-3">
             Set the fixed free copies per newspaper for this hawker. These will auto-fill in the Free PVC column every time you open billing for this hawker.
           </p>
-          {NEWSPAPERS.map((np, i) => (
-            <div key={`fq-${np.name}`} className="flex items-center justify-between gap-3 py-2 border-b border-slate-50 last:border-0">
+          {newspapers.map((np, i) => (
+            <div key={`fq-${np.id}`} className="flex items-center justify-between gap-3 py-2 border-b border-slate-50 last:border-0">
               <span className="text-sm font-medium text-slate-700 flex-1">{np.name}</span>
               <input
                 type="number"
@@ -125,6 +126,7 @@ function FreeQtyModal({ hawker, onClose, onSaved }: FreeQtyModalProps) {
 
 export default function DailyBillingEntry() {
   const [hawkers, setHawkers] = useState<Hawker[]>([]);
+  const [newspapers, setNewspapers] = useState<NewspaperEntry[]>([]);
   const [selectedHawker, setSelectedHawker] = useState<Hawker | null>(null);
   const [hawkerSearch, setHawkerSearch] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -135,17 +137,21 @@ export default function DailyBillingEntry() {
   const [isDataPreloaded, setIsDataPreloaded] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showDeleteBillingConfirm, setShowDeleteBillingConfirm] = useState(false);
-  const [rows, setRows] = useState<BillingRow[]>(
-    NEWSPAPERS.map(() => ({ supplyQty: 0, returnQty: 0, freePvc: 0 }))
-  );
+  const [rows, setRows] = useState<BillingRow[]>([]);
   // Resolved rates per newspaper for current bill date
-  const [supplyRates, setSupplyRates] = useState<number[]>(NEWSPAPERS.map((np) => np.rate));
-  const [returnRates, setReturnRates] = useState<number[]>(NEWSPAPERS.map((np) => np.rate));
+  const [supplyRates, setSupplyRates] = useState<number[]>([]);
+  const [returnRates, setReturnRates] = useState<number[]>([]);
 
   const today = new Date().toISOString().split('T')[0];
 
+  // Load hawkers and dynamic newspaper list on mount
   useEffect(() => {
     setHawkers(getHawkers());
+    const npList = getNewspaperList();
+    setNewspapers(npList);
+    setRows(npList.map(() => ({ supplyQty: 0, returnQty: 0, freePvc: 0 })));
+    setSupplyRates(npList.map((np) => np.rate));
+    setReturnRates(npList.map((np) => np.rate));
   }, []);
 
   const { register, handleSubmit, setValue, watch } = useForm<BillingFormValues>({
@@ -159,22 +165,22 @@ export default function DailyBillingEntry() {
   const paymentType = watch('paymentType');
   const billDate = watch('date');
 
-  // Recalculate rates whenever billDate changes
+  // Recalculate rates whenever billDate or newspapers change
   useEffect(() => {
-    if (!billDate) return;
-    const sRates = NEWSPAPERS.map((np) => getRateForDate(np.name, billDate));
-    const rRates = NEWSPAPERS.map((np) => getPreviousDayRate(np.name, billDate));
+    if (!billDate || newspapers.length === 0) return;
+    const sRates = newspapers.map((np) => getRateForDate(np.name, billDate));
+    const rRates = newspapers.map((np) => getPreviousDayRate(np.name, billDate));
     setSupplyRates(sRates);
     setReturnRates(rRates);
-  }, [billDate]);
+  }, [billDate, newspapers]);
 
   // When hawker or date changes, try to load existing saved record
   useEffect(() => {
-    if (!selectedHawker || !billDate) return;
+    if (!selectedHawker || !billDate || newspapers.length === 0) return;
     const existing = getExistingBillingRecord(selectedHawker.id, billDate);
     if (existing && existing.entries.length > 0) {
       // Pre-populate rows from saved record
-      const newRows = NEWSPAPERS.map((np, i) => {
+      const newRows = newspapers.map((np) => {
         const entry = existing.entries.find((e) => e.newspaper === np.name);
         if (entry) {
           return {
@@ -198,7 +204,7 @@ export default function DailyBillingEntry() {
       setIsDataPreloaded(false);
       setSubmitted(false);
     }
-  }, [selectedHawker, billDate]);
+  }, [selectedHawker, billDate, newspapers]);
 
   const updateRow = (index: number, field: 'supplyQty' | 'returnQty' | 'freePvc', value: string) => {
     const numVal = parseInt(value) || 0;
@@ -218,12 +224,12 @@ export default function DailyBillingEntry() {
     return Math.max(0, netQty * supplyRates[i] - ret);
   };
 
-  const getTotalBill = () => NEWSPAPERS.reduce((sum, _, i) => sum + getTotal(i), 0);
+  const getTotalBill = () => newspapers.reduce((sum, _, i) => sum + getTotal(i), 0);
 
   // Lokmat = first 3 newspapers (indices 0, 1, 2)
   const LOKMAT_COUNT = 3;
-  const getLokmtSubtotal = () => NEWSPAPERS.slice(0, LOKMAT_COUNT).reduce((sum, _, i) => sum + getTotal(i), 0);
-  const getOtherSubtotal = () => NEWSPAPERS.slice(LOKMAT_COUNT).reduce((sum, _, i) => sum + getTotal(LOKMAT_COUNT + i), 0);
+  const getLokmtSubtotal = () => newspapers.slice(0, LOKMAT_COUNT).reduce((sum, _, i) => sum + getTotal(i), 0);
+  const getOtherSubtotal = () => newspapers.slice(LOKMAT_COUNT).reduce((sum, _, i) => sum + getTotal(LOKMAT_COUNT + i), 0);
 
   const ratesAreDifferent = (i: number) => supplyRates[i] !== returnRates[i];
 
@@ -239,7 +245,7 @@ export default function DailyBillingEntry() {
     if (saved.length > 0) {
       setRows((prev) =>
         prev.map((row, i) => {
-          const entry = saved.find((e) => e.newspaper === NEWSPAPERS[i]?.name);
+          const entry = saved.find((e) => e.newspaper === newspapers[i]?.name);
           return entry ? { ...row, freePvc: entry.freeQty } : row;
         })
       );
@@ -256,7 +262,7 @@ export default function DailyBillingEntry() {
     // Reset rows first, then apply saved free qty settings
     const saved = getFreeQtyForHawker(hawker.id);
     setRows(
-      NEWSPAPERS.map((np, i) => {
+      newspapers.map((np) => {
         const entry = saved.find((e) => e.newspaper === np.name);
         return { supplyQty: 0, returnQty: 0, freePvc: entry ? entry.freeQty : 0 };
       })
@@ -268,7 +274,7 @@ export default function DailyBillingEntry() {
   const handleFreeQtySaved = (entries: HawkerFreeQtyEntry[]) => {
     setRows((prev) =>
       prev.map((row, i) => {
-        const entry = entries.find((e) => e.newspaper === NEWSPAPERS[i]?.name);
+        const entry = entries.find((e) => e.newspaper === newspapers[i]?.name);
         return entry !== undefined ? { ...row, freePvc: entry.freeQty } : row;
       })
     );
@@ -282,7 +288,7 @@ export default function DailyBillingEntry() {
     setIsSubmitting(true);
     await new Promise((r) => setTimeout(r, 600));
 
-    const entries = NEWSPAPERS.map((np, i) => ({
+    const entries = newspapers.map((np, i) => ({
       srNo: i + 1,
       newspaper: np.name,
       rate: supplyRates[i],
@@ -345,7 +351,7 @@ export default function DailyBillingEntry() {
 
   const handleReset = () => {
     setSelectedHawker(null);
-    setRows(NEWSPAPERS.map(() => ({ supplyQty: 0, returnQty: 0, freePvc: 0 })));
+    setRows(newspapers.map(() => ({ supplyQty: 0, returnQty: 0, freePvc: 0 })));
     setSubmitted(false);
     setIsDataPreloaded(false);
     setShowResetConfirm(false);
@@ -359,7 +365,7 @@ export default function DailyBillingEntry() {
     // Restore rows to free qty defaults only
     const saved = getFreeQtyForHawker(selectedHawker.id);
     setRows(
-      NEWSPAPERS.map((np) => {
+      newspapers.map((np) => {
         const entry = saved.find((e) => e.newspaper === np.name);
         return { supplyQty: 0, returnQty: 0, freePvc: entry ? entry.freeQty : 0 };
       })
@@ -375,7 +381,7 @@ export default function DailyBillingEntry() {
     deleteBillingRecordForHawkerDate(selectedHawker.id, billDate);
     const saved = getFreeQtyForHawker(selectedHawker.id);
     setRows(
-      NEWSPAPERS.map((np) => {
+      newspapers.map((np) => {
         const entry = saved.find((e) => e.newspaper === np.name);
         return { supplyQty: 0, returnQty: 0, freePvc: entry ? entry.freeQty : 0 };
       })
@@ -394,7 +400,7 @@ export default function DailyBillingEntry() {
     const date = billDate ?? today;
     const payType = paymentType;
 
-    const tableRows = NEWSPAPERS.map((np, i) => {
+    const tableRows = newspapers.map((np, i) => {
       const netQty = getNetQty(i);
       const total = getTotal(i);
       return `
@@ -411,8 +417,8 @@ export default function DailyBillingEntry() {
         </tr>`;
     }).join('');
 
-    const totalFreePvc = NEWSPAPERS.reduce((s, _, i) => s + (rows[i]?.freePvc || 0), 0);
-    const totalNetQty = NEWSPAPERS.reduce((s, _, i) => s + getNetQty(i), 0);
+    const totalFreePvc = newspapers.reduce((s, _, i) => s + (rows[i]?.freePvc || 0), 0);
+    const totalNetQty = newspapers.reduce((s, _, i) => s + getNetQty(i), 0);
     const grandTotal = getTotalBill();
 
     const printContent = `<!DOCTYPE html>
@@ -580,7 +586,7 @@ export default function DailyBillingEntry() {
       </tr>
     </thead>
     <tbody>
-      {tableRows}
+      ${tableRows}
     </tbody>
     <tfoot>
       <tr>
@@ -615,7 +621,7 @@ export default function DailyBillingEntry() {
     }, 400);
   };
 
-  const hasRateDifference = NEWSPAPERS.some((_, i) => ratesAreDifferent(i));
+  const hasRateDifference = newspapers.some((_, i) => ratesAreDifferent(i));
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -623,6 +629,7 @@ export default function DailyBillingEntry() {
       {showFreeQtyModal && selectedHawker && (
         <FreeQtyModal
           hawker={selectedHawker}
+          newspapers={newspapers}
           onClose={() => setShowFreeQtyModal(false)}
           onSaved={handleFreeQtySaved}
         />
@@ -823,7 +830,7 @@ export default function DailyBillingEntry() {
             <h3 className="text-sm font-semibold text-slate-700">Step 2 — Enter Newspaper Quantities</h3>
             <p className="text-xs text-slate-400 mt-0.5">Net Qty and Total are auto-calculated using date-based rates</p>
           </div>
-          {selectedHawker && NEWSPAPERS.some((np, i) => (rows[i]?.freePvc || 0) > 0) && (
+          {selectedHawker && newspapers.some((np, i) => (rows[i]?.freePvc || 0) > 0) && (
             <span className="text-xs text-amber-600 font-medium bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg">
               Free qty auto-filled
             </span>
@@ -832,12 +839,12 @@ export default function DailyBillingEntry() {
 
         {/* Mobile card layout */}
         <div className="block sm:hidden divide-y divide-[hsl(220,15%,93%)]">
-          {NEWSPAPERS.map((np, i) => {
+          {newspapers.map((np, i) => {
             const netQty = getNetQty(i);
             const total = getTotal(i);
             const hasEntry = rows[i]?.supplyQty > 0;
             return (
-              <React.Fragment key={`mob-billing-${np.name}`}>
+              <React.Fragment key={`mob-billing-${np.id}`}>
                 <div className={`px-4 py-3 space-y-2 ${hasEntry ? 'bg-[hsl(210,67%,98%)]' : ''}`}>
                   <div className="flex items-center justify-between">
                     <span className={`text-sm font-semibold ${hasEntry ? 'text-[hsl(210,67%,23%)]' : 'text-slate-700'}`}>{np.name}</span>
@@ -962,14 +969,14 @@ export default function DailyBillingEntry() {
               </tr>
             </thead>
             <tbody>
-              {NEWSPAPERS.map((np, i) => {
+              {newspapers.map((np, i) => {
                 const netQty = getNetQty(i);
                 const total = getTotal(i);
                 const hasEntry = rows[i]?.supplyQty > 0;
                 const ratesDiffer = ratesAreDifferent(i);
                 const hasFreeQty = (rows[i]?.freePvc || 0) > 0;
                 return (
-                  <React.Fragment key={`billing-row-${np.name}`}>
+                  <React.Fragment key={`billing-row-${np.id}`}>
                     <tr
                       className={`border-b border-[hsl(220,15%,93%)] transition-colors ${
                         hasEntry ? 'bg-[hsl(210,67%,98%)]' : 'hover:bg-slate-50/60'
@@ -1055,12 +1062,12 @@ export default function DailyBillingEntry() {
                         </td>
                         <td colSpan={2} className="px-4 py-2.5 text-center">
                           <span className="text-xs text-indigo-500 font-mono">
-                            {NEWSPAPERS.slice(0, LOKMAT_COUNT).reduce((s, _, j) => s + (rows[j]?.freePvc || 0), 0)}
+                            {newspapers.slice(0, LOKMAT_COUNT).reduce((s, _, j) => s + (rows[j]?.freePvc || 0), 0)}
                           </span>
                         </td>
                         <td className="px-4 py-2.5 text-center">
                           <span className="text-xs text-indigo-500 font-mono">
-                            {NEWSPAPERS.slice(0, LOKMAT_COUNT).reduce((s, _, j) => s + getNetQty(j), 0)}
+                            {newspapers.slice(0, LOKMAT_COUNT).reduce((s, _, j) => s + getNetQty(j), 0)}
                           </span>
                         </td>
                         <td className="px-4 py-2.5 text-right bg-indigo-100/60">
@@ -1078,10 +1085,10 @@ export default function DailyBillingEntry() {
               <tr className="bg-slate-100 border-t border-slate-200">
                 <td colSpan={6} className="px-4 py-2 text-xs font-semibold text-slate-500">Other Newspapers Total</td>
                 <td className="px-4 py-2 text-center font-mono text-xs text-slate-500">
-                  {NEWSPAPERS.slice(LOKMAT_COUNT).reduce((s, _, j) => s + (rows[LOKMAT_COUNT + j]?.freePvc || 0), 0)}
+                  {newspapers.slice(LOKMAT_COUNT).reduce((s, _, j) => s + (rows[LOKMAT_COUNT + j]?.freePvc || 0), 0)}
                 </td>
                 <td className="px-4 py-2 text-center font-mono text-xs text-slate-500">
-                  {NEWSPAPERS.slice(LOKMAT_COUNT).reduce((s, _, j) => s + getNetQty(LOKMAT_COUNT + j), 0)}
+                  {newspapers.slice(LOKMAT_COUNT).reduce((s, _, j) => s + getNetQty(LOKMAT_COUNT + j), 0)}
                 </td>
                 <td className="px-4 py-2 text-right font-mono font-semibold text-slate-700">
                   ₹{getOtherSubtotal().toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -1090,10 +1097,10 @@ export default function DailyBillingEntry() {
               <tr className="bg-[hsl(210,67%,23%)] text-white">
                 <td colSpan={6} className="px-4 py-3 text-sm font-semibold">Grand Total</td>
                 <td className="px-4 py-3 text-center font-mono font-bold">
-                  {NEWSPAPERS.reduce((s, _, i) => s + (rows[i]?.freePvc || 0), 0)}
+                  {newspapers.reduce((s, _, i) => s + (rows[i]?.freePvc || 0), 0)}
                 </td>
                 <td className="px-4 py-3 text-center font-mono font-bold">
-                  {NEWSPAPERS.reduce((s, _, i) => s + getNetQty(i), 0)}
+                  {newspapers.reduce((s, _, i) => s + getNetQty(i), 0)}
                 </td>
                 <td className="px-4 py-3 text-right font-mono font-bold text-lg">
                   ₹{getTotalBill().toLocaleString('en-IN', { minimumFractionDigits: 2 })}
