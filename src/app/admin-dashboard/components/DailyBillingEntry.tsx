@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
-import { Search, Send, CheckCircle2, AlertCircle, MessageSquare, ChevronDown, Printer, Info, Settings, X, Save, Trash2 } from 'lucide-react';
+import { Search, Send, CheckCircle2, AlertCircle, MessageSquare, ChevronDown, Printer, Info, Settings, X, Save, Trash2, Mic, MicOff, Volume2 } from 'lucide-react';
 import { getHawkers, saveBillingRecord, getRateForDate, getPreviousDayRate, getFreeQtyForHawker, saveFreeQtyForHawker, getExistingBillingRecord, deleteBillingRecordForHawkerDate, getNewspaperList } from '@/lib/storage';
 import type { Hawker, DailyBillingRecord, HawkerFreeQtyEntry, NewspaperEntry } from '@/lib/storage';
 import PinModal from './PinModal';
@@ -122,6 +122,412 @@ function FreeQtyModal({ hawker, newspapers, onClose, onSaved }: FreeQtyModalProp
   );
 }
 
+// ─── Voice Billing Modal ──────────────────────────────────────────────────────
+
+interface VoiceBillingModalProps {
+  hawkers: Hawker[];
+  newspapers: NewspaperEntry[];
+  onClose: () => void;
+  onApply: (hawker: Hawker, npIndex: number, supply: number, returnQty: number) => void;
+}
+
+function normalizeText(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+}
+
+function fuzzyMatch(query: string, target: string): number {
+  const q = normalizeText(query);
+  const t = normalizeText(target);
+  if (t === q) return 1;
+  if (t.includes(q) || q.includes(t)) return 0.9;
+  // word overlap score
+  const qWords = q.split(/\s+/);
+  const tWords = t.split(/\s+/);
+  const matches = qWords.filter((w) => tWords.some((tw) => tw.includes(w) || w.includes(tw)));
+  return matches.length / Math.max(qWords.length, tWords.length);
+}
+
+interface ParsedVoiceCommand {
+  hawker: Hawker | null;
+  newspaper: NewspaperEntry | null;
+  supply: number;
+  returnQty: number;
+  confidence: number;
+  rawText: string;
+}
+
+function parseVoiceCommand(
+  text: string,
+  hawkers: Hawker[],
+  newspapers: NewspaperEntry[]
+): ParsedVoiceCommand {
+  const raw = text;
+  const normalized = normalizeText(text);
+
+  // ── 1. Extract supply and return numbers ──────────────────────────────────
+  // Patterns: "supply 32 return 2", "supply 32 ret 2", "32 return 2", "32 2"
+  let supply = 0;
+  let returnQty = 0;
+
+  const supplyReturnPattern = /supply\s+(\d+)\s+(?:return|ret|retur|retun)\s+(\d+)/i;
+  const supplyOnlyReturnPattern = /(\d+)\s+(?:return|ret|retur|retun)\s+(\d+)/i;
+  const twoNumbersAtEnd = /(\d+)\s+(\d+)\s*$/;
+
+  let textForParsing = normalized;
+
+  const m1 = textForParsing.match(supplyReturnPattern);
+  if (m1) {
+    supply = parseInt(m1[1]);
+    returnQty = parseInt(m1[2]);
+    textForParsing = textForParsing.replace(m1[0], '').trim();
+  } else {
+    const m2 = textForParsing.match(supplyOnlyReturnPattern);
+    if (m2) {
+      supply = parseInt(m2[1]);
+      returnQty = parseInt(m2[2]);
+      textForParsing = textForParsing.replace(m2[0], '').trim();
+    } else {
+      const m3 = textForParsing.match(twoNumbersAtEnd);
+      if (m3) {
+        supply = parseInt(m3[1]);
+        returnQty = parseInt(m3[2]);
+        textForParsing = textForParsing.replace(m3[0], '').trim();
+      } else {
+        // single number = supply only
+        const singleNum = textForParsing.match(/(\d+)/);
+        if (singleNum) {
+          supply = parseInt(singleNum[1]);
+          textForParsing = textForParsing.replace(singleNum[0], '').trim();
+        }
+      }
+    }
+  }
+
+  // ── 2. Match newspaper ────────────────────────────────────────────────────
+  let bestNp: NewspaperEntry | null = null;
+  let bestNpScore = 0;
+
+  for (const np of newspapers) {
+    const score = fuzzyMatch(textForParsing, np.name);
+    if (score > bestNpScore) {
+      bestNpScore = score;
+      bestNp = np;
+    }
+  }
+
+  // ── 3. Match hawker ───────────────────────────────────────────────────────
+  // Try ID match first (number at start)
+  let bestHawker: Hawker | null = null;
+  let bestHawkerScore = 0;
+
+  const idMatch = normalized.match(/^(\d+)/);
+  if (idMatch) {
+    const idNum = parseInt(idMatch[1]);
+    const found = hawkers.find((h) => h.id === idNum);
+    if (found) {
+      bestHawker = found;
+      bestHawkerScore = 1;
+    }
+  }
+
+  if (!bestHawker) {
+    // Remove newspaper name tokens from text to isolate hawker name
+    const npTokens = bestNp ? normalizeText(bestNp.name).split(/\s+/) : [];
+    let hawkerText = textForParsing;
+    for (const tok of npTokens) {
+      hawkerText = hawkerText.replace(new RegExp(`\\b${tok}\\b`, 'g'), '').trim();
+    }
+    hawkerText = hawkerText.replace(/\b(supply|return|ret|retur|retun)\b/g, '').trim();
+
+    for (const h of hawkers) {
+      const score = fuzzyMatch(hawkerText, h.name);
+      if (score > bestHawkerScore) {
+        bestHawkerScore = score;
+        bestHawker = h;
+      }
+    }
+  }
+
+  const confidence = (bestHawkerScore + bestNpScore) / 2;
+
+  return {
+    hawker: bestHawker,
+    newspaper: bestNp,
+    supply,
+    returnQty,
+    confidence,
+    rawText: raw,
+  };
+}
+
+function VoiceBillingModal({ hawkers, newspapers, onClose, onApply }: VoiceBillingModalProps) {
+  const [isListening, setIsListening] = useState(false);
+  const [transcript, setTranscript] = useState('');
+  const [interimTranscript, setInterimTranscript] = useState('');
+  const [parsed, setParsed] = useState<ParsedVoiceCommand | null>(null);
+  const [supported, setSupported] = useState(true);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+
+  useEffect(() => {
+    const SpeechRecognitionAPI =
+      (typeof window !== 'undefined' &&
+        ((window as unknown as { SpeechRecognition?: typeof SpeechRecognition }).SpeechRecognition ||
+          (window as unknown as { webkitSpeechRecognition?: typeof SpeechRecognition }).webkitSpeechRecognition)) ||
+      null;
+    if (!SpeechRecognitionAPI) {
+      setSupported(false);
+      return;
+    }
+
+    const recognition = new SpeechRecognitionAPI();
+    recognition.lang = 'en-IN';
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 3;
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      let interim = '';
+      let final = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) {
+          final += result[0].transcript;
+        } else {
+          interim += result[0].transcript;
+        }
+      }
+      if (final) {
+        setTranscript(final.trim());
+        setInterimTranscript('');
+        const result = parseVoiceCommand(final.trim(), hawkers, newspapers);
+        setParsed(result);
+      } else {
+        setInterimTranscript(interim);
+      }
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      setIsListening(false);
+      if (event.error !== 'no-speech' && event.error !== 'aborted') {
+        toast.error(`Mic error: ${event.error}`);
+      }
+    };
+
+    recognitionRef.current = recognition;
+
+    return () => {
+      recognition.abort();
+    };
+  }, [hawkers, newspapers]);
+
+  const startListening = () => {
+    if (!recognitionRef.current) return;
+    setTranscript('');
+    setInterimTranscript('');
+    setParsed(null);
+    setIsListening(true);
+    recognitionRef.current.start();
+  };
+
+  const stopListening = () => {
+    if (!recognitionRef.current) return;
+    recognitionRef.current.stop();
+    setIsListening(false);
+  };
+
+  const handleApply = () => {
+    if (!parsed?.hawker || !parsed?.newspaper) return;
+    const npIndex = newspapers.findIndex((np) => np.id === parsed.newspaper!.id);
+    if (npIndex === -1) return;
+    onApply(parsed.hawker, npIndex, parsed.supply, parsed.returnQty);
+    onClose();
+  };
+
+  const handleManualParse = () => {
+    if (!transcript.trim()) return;
+    const result = parseVoiceCommand(transcript.trim(), hawkers, newspapers);
+    setParsed(result);
+  };
+
+  const confidenceColor =
+    !parsed ? '' :
+    parsed.confidence >= 0.7 ? 'text-green-600' :
+    parsed.confidence >= 0.4 ? 'text-amber-600' : 'text-red-500';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg animate-fade-in">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-[hsl(210,67%,23%)] flex items-center justify-center">
+              <Mic size={16} className="text-white" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Voice Billing Entry</h3>
+              <p className="text-xs text-slate-500">Speak hawker + newspaper + supply + return</p>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="px-5 py-5 space-y-4">
+          {!supported ? (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+              Voice input is not supported in this browser. Please use Chrome or Edge.
+            </div>
+          ) : (
+            <>
+              {/* Example commands */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1.5">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Example commands</p>
+                <p className="text-xs text-slate-600 font-mono bg-white border border-slate-200 rounded-lg px-3 py-1.5">
+                  &quot;Ajay Bagul Lokmat CNX supply 32 return 2&quot;
+                </p>
+                <p className="text-xs text-slate-600 font-mono bg-white border border-slate-200 rounded-lg px-3 py-1.5">
+                  &quot;Hawker 5 Lokmat Big 45 return 3&quot;
+                </p>
+                <p className="text-xs text-slate-600 font-mono bg-white border border-slate-200 rounded-lg px-3 py-1.5">
+                  &quot;Ramesh Sakal supply 20 return 0&quot;
+                </p>
+              </div>
+
+              {/* Mic button */}
+              <div className="flex flex-col items-center gap-3">
+                <button
+                  type="button"
+                  onClick={isListening ? stopListening : startListening}
+                  className={`w-20 h-20 rounded-full flex items-center justify-center shadow-lg transition-all duration-200 ${
+                    isListening
+                      ? 'bg-red-500 hover:bg-red-600 animate-pulse scale-110' :'bg-[hsl(210,67%,23%)] hover:bg-[hsl(210,67%,18%)]'
+                  }`}
+                >
+                  {isListening ? (
+                    <MicOff size={32} className="text-white" />
+                  ) : (
+                    <Mic size={32} className="text-white" />
+                  )}
+                </button>
+                <p className="text-sm font-medium text-slate-600">
+                  {isListening ? (
+                    <span className="text-red-500 flex items-center gap-1.5">
+                      <span className="w-2 h-2 bg-red-500 rounded-full animate-ping inline-block" />
+                      Listening… speak now
+                    </span>
+                  ) : (
+                    'Tap mic to start speaking'
+                  )}
+                </p>
+              </div>
+
+              {/* Transcript display */}
+              <div>
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1.5">
+                  Transcript
+                </label>
+                <div className="relative">
+                  <textarea
+                    value={transcript || interimTranscript}
+                    onChange={(e) => setTranscript(e.target.value)}
+                    placeholder="Voice transcript will appear here… or type manually"
+                    rows={2}
+                    className="w-full input-field text-sm resize-none pr-10"
+                  />
+                  {(transcript || interimTranscript) && (
+                    <Volume2 size={14} className="absolute right-3 top-3 text-slate-400" />
+                  )}
+                </div>
+                {transcript && (
+                  <button
+                    type="button"
+                    onClick={handleManualParse}
+                    className="mt-1.5 text-xs text-[hsl(210,67%,40%)] hover:underline font-medium"
+                  >
+                    Re-parse transcript →
+                  </button>
+                )}
+              </div>
+
+              {/* Parsed result */}
+              {parsed && (
+                <div className={`rounded-xl border p-4 space-y-3 ${
+                  parsed.confidence >= 0.6 ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-slate-700 uppercase tracking-wide">Parsed Result</p>
+                    <span className={`text-xs font-semibold ${confidenceColor}`}>
+                      {Math.round(parsed.confidence * 100)}% match
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-white rounded-lg border border-slate-200 px-3 py-2">
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-0.5">Hawker</p>
+                      {parsed.hawker ? (
+                        <p className="text-sm font-bold text-slate-900">
+                          #{parsed.hawker.id} {parsed.hawker.name}
+                        </p>
+                      ) : (
+                        <p className="text-sm text-red-500 font-medium">Not found</p>
+                      )}
+                    </div>
+                    <div className="bg-white rounded-lg border border-slate-200 px-3 py-2">
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-0.5">Newspaper</p>
+                      {parsed.newspaper ? (
+                        <p className="text-sm font-bold text-slate-900">{parsed.newspaper.name}</p>
+                      ) : (
+                        <p className="text-sm text-red-500 font-medium">Not found</p>
+                      )}
+                    </div>
+                    <div className="bg-white rounded-lg border border-slate-200 px-3 py-2">
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-0.5">Supply Qty</p>
+                      <p className="text-lg font-bold text-[hsl(210,67%,23%)] font-mono">{parsed.supply}</p>
+                    </div>
+                    <div className="bg-white rounded-lg border border-slate-200 px-3 py-2">
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-0.5">Return Qty</p>
+                      <p className="text-lg font-bold text-amber-600 font-mono">{parsed.returnQty}</p>
+                    </div>
+                  </div>
+                  {parsed.confidence < 0.4 && (
+                    <p className="text-xs text-amber-700 bg-amber-100 rounded-lg px-3 py-2">
+                      Low confidence match. Please verify the hawker and newspaper before applying.
+                    </p>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleApply}
+            disabled={!parsed?.hawker || !parsed?.newspaper}
+            className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold bg-[hsl(210,67%,23%)] text-white hover:bg-[hsl(210,67%,18%)] disabled:opacity-40 transition-colors"
+          >
+            <CheckCircle2 size={14} />
+            Apply to Billing
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function DailyBillingEntry() {
@@ -133,6 +539,7 @@ export default function DailyBillingEntry() {
   const [submitted, setSubmitted] = useState(false);
   const [whatsappSending, setWhatsappSending] = useState(false);
   const [showFreeQtyModal, setShowFreeQtyModal] = useState(false);
+  const [showVoiceModal, setShowVoiceModal] = useState(false);
   const [lokmtPaymentType, setLokmtPaymentType] = useState<'Transfer' | 'Cash'>('Transfer');
   const [isDataPreloaded, setIsDataPreloaded] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -292,6 +699,26 @@ export default function DailyBillingEntry() {
         const entry = entries.find((e) => e.newspaper === newspapers[i]?.name);
         return entry !== undefined ? { ...row, freePvc: entry.freeQty } : row;
       })
+    );
+  };
+
+  // Handle voice billing apply: select hawker + fill newspaper row
+  const handleVoiceApply = (hawker: Hawker, npIndex: number, supply: number, returnQty: number) => {
+    // Select hawker if not already selected
+    if (!selectedHawker || selectedHawker.id !== hawker.id) {
+      handleSelectHawker(hawker);
+    }
+    // Apply supply/return to the specific newspaper row
+    setRows((prev) => {
+      const next = [...prev];
+      if (next[npIndex]) {
+        next[npIndex] = { ...next[npIndex], supplyQty: supply, returnQty };
+      }
+      return next;
+    });
+    toast.success(
+      `Voice filled: ${hawker.name} → ${newspapers[npIndex]?.name} — Supply: ${supply}, Return: ${returnQty}`,
+      { duration: 4000 }
     );
   };
 
@@ -650,6 +1077,16 @@ export default function DailyBillingEntry() {
         />
       )}
 
+      {/* Voice Billing Modal */}
+      {showVoiceModal && (
+        <VoiceBillingModal
+          hawkers={hawkers}
+          newspapers={newspapers}
+          onClose={() => setShowVoiceModal(false)}
+          onApply={handleVoiceApply}
+        />
+      )}
+
       {/* Reset Day Data Confirmation */}
       {showResetConfirm && selectedHawker && (
         <PinModal
@@ -695,9 +1132,21 @@ export default function DailyBillingEntry() {
           <h2 className="text-xl font-bold text-slate-900">Daily Billing Entry</h2>
           <p className="text-sm text-slate-500 mt-0.5">Enter supply and return quantities for each newspaper</p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-slate-500 flex-shrink-0">
-          <span className="w-2 h-2 bg-green-500 rounded-full inline-block" />
-          {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Voice Input Button */}
+          <button
+            type="button"
+            onClick={() => setShowVoiceModal(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold bg-[hsl(210,67%,23%)] text-white hover:bg-[hsl(210,67%,18%)] transition-colors shadow-sm"
+            title="Voice billing entry"
+          >
+            <Mic size={15} />
+            <span className="hidden sm:inline">Voice Entry</span>
+          </button>
+          <div className="flex items-center gap-2 text-xs text-slate-500">
+            <span className="w-2 h-2 bg-green-500 rounded-full inline-block" />
+            {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+          </div>
         </div>
       </div>
 
