@@ -19,9 +19,12 @@ import {
   X,
   Lock,
   Check,
+  Search,
+  Users,
 } from 'lucide-react';
 import { NEWSPAPERS } from '@/lib/mockData';
-import { getNewspaperList, addNewspaper, updateNewspaper, deleteNewspaper, type NewspaperEntry,  } from '@/lib/storage';
+import { getNewspaperList, addNewspaper, updateNewspaper, deleteNewspaper, type NewspaperEntry, getHawkers, getFreeQtyForHawker, saveFreeQtyForHawker, type HawkerFreeQtyEntry } from '@/lib/storage';
+import type { Hawker } from '@/lib/storage';
 
 interface NewspaperRate {
   name: string;
@@ -56,7 +59,7 @@ const SETTINGS_PIN = '2212';
 
 const SECTION_TABS = [
   { id: 'rates', label: 'Newspaper Rates', icon: <IndianRupee size={16} /> },
-  { id: 'free', label: 'Free Copy Limits', icon: <Gift size={16} /> },
+  { id: 'free', label: 'Free PVC Manager', icon: <Gift size={16} /> },
   { id: 'payment', label: 'Payment Types', icon: <CreditCard size={16} /> },
   { id: 'billing', label: 'Billing Cycle', icon: <Calendar size={16} /> },
   { id: 'access', label: 'User Access', icon: <ShieldCheck size={16} /> },
@@ -70,6 +73,62 @@ export default function SettingsView() {
   // --- Newspaper Rates & Free Copies ---
   const [rates, setRates] = useState<NewspaperRate[]>(
     NEWSPAPERS.map((n) => ({ name: n.name, rate: n.rate, freeCopies: 2 }))
+  );
+
+  // --- Free PVC Manager ---
+  const [allHawkers, setAllHawkers] = useState<Hawker[]>([]);
+  const [freeQtySearch, setFreeQtySearch] = useState('');
+  // freeQtyMap: hawkerId -> { [newspaperName]: qty }
+  const [freeQtyMap, setFreeQtyMap] = useState<Record<number, Record<string, number>>>({});
+  const [freeQtySaved, setFreeQtySaved] = useState(false);
+  const [freeQtyNewspapers, setFreeQtyNewspapers] = useState<NewspaperEntry[]>([]);
+
+  useEffect(() => {
+    if (activeTab === 'free') {
+      const hawkers = getHawkers();
+      const npList = getNewspaperList();
+      setAllHawkers(hawkers);
+      setFreeQtyNewspapers(npList);
+      // Load existing free qty for all hawkers
+      const map: Record<number, Record<string, number>> = {};
+      hawkers.forEach((h) => {
+        const entries = getFreeQtyForHawker(h.id);
+        const npMap: Record<string, number> = {};
+        npList.forEach((np) => {
+          const found = entries.find((e) => e.newspaper === np.name);
+          npMap[np.name] = found ? found.freeQty : 0;
+        });
+        map[h.id] = npMap;
+      });
+      setFreeQtyMap(map);
+    }
+  }, [activeTab]);
+
+  const handleFreeQtyChange = (hawkerId: number, newspaper: string, value: string) => {
+    const num = parseInt(value) || 0;
+    setFreeQtyMap((prev) => ({
+      ...prev,
+      [hawkerId]: { ...(prev[hawkerId] || {}), [newspaper]: num },
+    }));
+  };
+
+  const handleSaveAllFreeQty = () => {
+    allHawkers.forEach((h) => {
+      const npMap = freeQtyMap[h.id] || {};
+      const entries: HawkerFreeQtyEntry[] = freeQtyNewspapers.map((np) => ({
+        newspaper: np.name,
+        freeQty: npMap[np.name] || 0,
+      }));
+      saveFreeQtyForHawker(h.id, entries);
+    });
+    setFreeQtySaved(true);
+    setTimeout(() => setFreeQtySaved(false), 2500);
+  };
+
+  const filteredFreeQtyHawkers = allHawkers.filter(
+    (h) =>
+      h.name.toLowerCase().includes(freeQtySearch.toLowerCase()) ||
+      String(h.id).includes(freeQtySearch)
   );
 
   // --- Payment Types ---
@@ -359,40 +418,109 @@ export default function SettingsView() {
           </div>
         )}
 
-        {/* ── Free Copy Limits ── */}
+        {/* ── Free PVC Manager ── */}
         {activeTab === 'free' && (
           <div>
-            <div className="px-5 py-4 border-b border-slate-100">
-              <h2 className="font-semibold text-slate-800">Free Copy Limits per Hawker</h2>
-              <p className="text-xs text-slate-500 mt-0.5">Maximum free copies a hawker can receive per newspaper per day</p>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-wrap gap-3">
+              <div>
+                <h2 className="font-semibold text-slate-800">Free PVC Manager</h2>
+                <p className="text-xs text-slate-500 mt-0.5">Set fixed free PVC copies per hawker per newspaper. These auto-fill in Daily Billing.</p>
+              </div>
+              <button
+                onClick={handleSaveAllFreeQty}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                  freeQtySaved
+                    ? 'bg-green-100 text-green-700 border border-green-200' :'bg-[hsl(210,67%,23%)] text-white hover:bg-[hsl(210,67%,18%)]'
+                }`}
+              >
+                {freeQtySaved ? <CheckCircle size={15} /> : <Save size={15} />}
+                {freeQtySaved ? 'Saved!' : 'Save All'}
+              </button>
             </div>
-            <div className="p-5 space-y-3">
-              {rates.map((row, i) => (
-                <div key={row.name} className="flex items-center justify-between gap-4 py-2.5 border-b border-slate-50 last:border-0">
-                  <span className="text-sm font-medium text-slate-700 flex-1">{row.name}</span>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => {
-                        const updated = [...rates];
-                        updated[i] = { ...updated[i], freeCopies: Math.max(0, updated[i].freeCopies - 1) };
-                        setRates(updated);
-                      }}
-                      className="w-7 h-7 rounded-full border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors text-base font-bold"
-                    >−</button>
-                    <span className="w-10 text-center font-semibold text-slate-800 text-sm">{row.freeCopies}</span>
-                    <button
-                      onClick={() => {
-                        const updated = [...rates];
-                        updated[i] = { ...updated[i], freeCopies: updated[i].freeCopies + 1 };
-                        setRates(updated);
-                      }}
-                      className="w-7 h-7 rounded-full border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors text-base font-bold"
-                    >+</button>
-                  </div>
-                  <span className="text-xs text-slate-400 w-20 text-right">copies/day</span>
-                </div>
-              ))}
+
+            {/* Search */}
+            <div className="px-5 pt-4 pb-2">
+              <div className="relative">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search hawker by name or ID..."
+                  value={freeQtySearch}
+                  onChange={(e) => setFreeQtySearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(210,67%,23%)]/20 focus:border-[hsl(210,67%,23%)]"
+                />
+              </div>
             </div>
+
+            {/* Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
+                    <th className="text-left px-4 py-3 font-semibold sticky left-0 bg-slate-50 z-10 min-w-[160px]">
+                      <div className="flex items-center gap-1.5">
+                        <Users size={13} />
+                        Hawker
+                      </div>
+                    </th>
+                    {freeQtyNewspapers.map((np) => (
+                      <th key={np.id} className="text-center px-3 py-3 font-semibold whitespace-nowrap min-w-[100px]">
+                        {np.name}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredFreeQtyHawkers.length === 0 ? (
+                    <tr>
+                      <td colSpan={freeQtyNewspapers.length + 1} className="px-4 py-8 text-center text-slate-400 text-sm">
+                        No hawkers found.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredFreeQtyHawkers.map((h) => (
+                      <tr key={h.id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="px-4 py-2.5 sticky left-0 bg-white hover:bg-slate-50/60 z-10">
+                          <div className="font-medium text-slate-800 text-xs leading-tight">{h.name}</div>
+                          <div className="text-[10px] text-slate-400">ID: {h.id}</div>
+                        </td>
+                        {freeQtyNewspapers.map((np) => (
+                          <td key={np.id} className="px-3 py-2.5 text-center">
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              min={0}
+                              value={freeQtyMap[h.id]?.[np.name] || ''}
+                              onChange={(e) => handleFreeQtyChange(h.id, np.name, e.target.value)}
+                              placeholder="0"
+                              className="w-16 text-center border border-slate-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(210,67%,23%)]/20 focus:border-[hsl(210,67%,23%)] tabular-nums"
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {filteredFreeQtyHawkers.length > 0 && (
+              <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between">
+                <p className="text-xs text-slate-400">
+                  Showing {filteredFreeQtyHawkers.length} of {allHawkers.length} hawkers
+                </p>
+                <button
+                  onClick={handleSaveAllFreeQty}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                    freeQtySaved
+                      ? 'bg-green-100 text-green-700 border border-green-200' :'bg-[hsl(210,67%,23%)] text-white hover:bg-[hsl(210,67%,18%)]'
+                  }`}
+                >
+                  {freeQtySaved ? <CheckCircle size={15} /> : <Save size={15} />}
+                  {freeQtySaved ? 'Saved!' : 'Save All'}
+                </button>
+              </div>
+            )}
           </div>
         )}
 
