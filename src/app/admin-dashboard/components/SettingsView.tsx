@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   IndianRupee,
   Gift,
@@ -14,8 +14,14 @@ import {
   Trash2,
   ToggleLeft,
   ToggleRight,
+  Newspaper,
+  Pencil,
+  X,
+  Lock,
+  Check,
 } from 'lucide-react';
 import { NEWSPAPERS } from '@/lib/mockData';
+import { getNewspaperList, addNewspaper, updateNewspaper, deleteNewspaper, type NewspaperEntry,  } from '@/lib/storage';
 
 interface NewspaperRate {
   name: string;
@@ -46,12 +52,15 @@ interface UserRole {
   canAccessSettings: boolean;
 }
 
+const SETTINGS_PIN = '2212';
+
 const SECTION_TABS = [
   { id: 'rates', label: 'Newspaper Rates', icon: <IndianRupee size={16} /> },
   { id: 'free', label: 'Free Copy Limits', icon: <Gift size={16} /> },
   { id: 'payment', label: 'Payment Types', icon: <CreditCard size={16} /> },
   { id: 'billing', label: 'Billing Cycle', icon: <Calendar size={16} /> },
   { id: 'access', label: 'User Access', icon: <ShieldCheck size={16} /> },
+  { id: 'newspapers', label: 'Newspapers', icon: <Newspaper size={16} /> },
 ];
 
 export default function SettingsView() {
@@ -121,6 +130,24 @@ export default function SettingsView() {
     },
   ]);
 
+  // --- Newspaper Management ---
+  const [newspapers, setNewspapers] = useState<NewspaperEntry[]>([]);
+  const [npPinUnlocked, setNpPinUnlocked] = useState(false);
+  const [npPinInput, setNpPinInput] = useState('');
+  const [npPinError, setNpPinError] = useState('');
+  const [editingNpId, setEditingNpId] = useState<string | null>(null);
+  const [editNpName, setEditNpName] = useState('');
+  const [editNpRate, setEditNpRate] = useState('');
+  const [newNpName, setNewNpName] = useState('');
+  const [newNpRate, setNewNpRate] = useState('');
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deletePinInput, setDeletePinInput] = useState('');
+  const [deletePinError, setDeletePinError] = useState('');
+
+  useEffect(() => {
+    setNewspapers(getNewspaperList());
+  }, []);
+
   const handleSave = () => {
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
@@ -157,10 +184,74 @@ export default function SettingsView() {
   };
 
   const toggleRolePermission = (roleId: string, perm: keyof Omit<UserRole, 'id' | 'role'>) => {
-    if (roleId === 'admin') return; // Admin permissions are locked
+    if (roleId === 'admin') return;
     setUserRoles((prev) =>
       prev.map((r) => (r.id === roleId ? { ...r, [perm]: !r[perm] } : r))
     );
+  };
+
+  // --- Newspaper Management Handlers ---
+  const handleNpPinSubmit = () => {
+    if (npPinInput === SETTINGS_PIN) {
+      setNpPinUnlocked(true);
+      setNpPinError('');
+      setNpPinInput('');
+    } else {
+      setNpPinError('Incorrect PIN. Please try again.');
+      setNpPinInput('');
+    }
+  };
+
+  const handleAddNewspaper = () => {
+    const name = newNpName.trim();
+    const rate = parseFloat(newNpRate);
+    if (!name || isNaN(rate) || rate < 0) return;
+    const added = addNewspaper({ name, rate });
+    setNewspapers((prev) => [...prev, added]);
+    setNewNpName('');
+    setNewNpRate('');
+  };
+
+  const handleStartEdit = (np: NewspaperEntry) => {
+    setEditingNpId(np.id);
+    setEditNpName(np.name);
+    setEditNpRate(String(np.rate));
+  };
+
+  const handleSaveEdit = (id: string) => {
+    const name = editNpName.trim();
+    const rate = parseFloat(editNpRate);
+    if (!name || isNaN(rate) || rate < 0) return;
+    updateNewspaper(id, { name, rate });
+    setNewspapers((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, name, rate } : n))
+    );
+    setEditingNpId(null);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingNpId(null);
+    setEditNpName('');
+    setEditNpRate('');
+  };
+
+  const handleDeleteConfirm = (id: string) => {
+    setDeleteConfirmId(id);
+    setDeletePinInput('');
+    setDeletePinError('');
+  };
+
+  const handleDeleteWithPin = () => {
+    if (deletePinInput === SETTINGS_PIN) {
+      deleteNewspaper(deleteConfirmId!);
+      setNewspapers((prev) => prev.filter((n) => n.id !== deleteConfirmId));
+      setDeleteConfirmId(null);
+      setDeletePinInput('');
+      setDeletePinError('');
+    } else {
+      setDeletePinError('Incorrect PIN.');
+      setDeletePinInput('');
+    }
   };
 
   const PERMISSIONS: { key: keyof Omit<UserRole, 'id' | 'role'>; label: string }[] = [
@@ -197,7 +288,7 @@ export default function SettingsView() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all flex-1 justify-center min-w-[120px] ${
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all flex-1 justify-center min-w-[100px] ${
               activeTab === tab.id
                 ? 'bg-white text-[hsl(210,67%,23%)] shadow-sm'
                 : 'text-slate-500 hover:text-slate-700'
@@ -338,8 +429,6 @@ export default function SettingsView() {
                   </div>
                 </div>
               ))}
-
-              {/* Add new */}
               <div className="flex gap-2 pt-3">
                 <input
                   type="text"
@@ -434,8 +523,6 @@ export default function SettingsView() {
                   </button>
                 </div>
               </div>
-
-              {/* Summary card */}
               <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Cycle Preview</p>
                 <p className="text-sm text-slate-700">
@@ -500,7 +587,234 @@ export default function SettingsView() {
             </div>
           </div>
         )}
+
+        {/* ── Newspaper Management ── */}
+        {activeTab === 'newspapers' && (
+          <div>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <div>
+                <h2 className="font-semibold text-slate-800">Newspaper Management</h2>
+                <p className="text-xs text-slate-500 mt-0.5">Add, edit, or delete newspapers. Protected by PIN.</p>
+              </div>
+              {npPinUnlocked && (
+                <button
+                  onClick={() => setNpPinUnlocked(false)}
+                  className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 transition-colors"
+                >
+                  <Lock size={13} /> Lock
+                </button>
+              )}
+            </div>
+
+            {/* PIN Gate */}
+            {!npPinUnlocked ? (
+              <div className="flex flex-col items-center justify-center py-14 px-6 gap-5">
+                <div className="w-14 h-14 rounded-full bg-[hsl(210,67%,23%)]/10 flex items-center justify-center">
+                  <Lock size={26} className="text-[hsl(210,67%,23%)]" />
+                </div>
+                <div className="text-center">
+                  <p className="font-semibold text-slate-800 text-base">PIN Required</p>
+                  <p className="text-sm text-slate-500 mt-1">Enter your admin PIN to manage newspapers</p>
+                </div>
+                <div className="flex flex-col items-center gap-3 w-full max-w-xs">
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="Enter PIN"
+                    value={npPinInput}
+                    onChange={(e) => { setNpPinInput(e.target.value); setNpPinError(''); }}
+                    onKeyDown={(e) => e.key === 'Enter' && handleNpPinSubmit()}
+                    className="w-full text-center tracking-widest text-lg border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[hsl(210,67%,23%)]/20 focus:border-[hsl(210,67%,23%)]"
+                  />
+                  {npPinError && (
+                    <p className="text-xs text-red-500 font-medium">{npPinError}</p>
+                  )}
+                  <button
+                    onClick={handleNpPinSubmit}
+                    className="w-full py-2.5 bg-[hsl(210,67%,23%)] text-white rounded-xl text-sm font-semibold hover:bg-[hsl(210,67%,18%)] transition-colors"
+                  >
+                    Unlock
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-5 space-y-4">
+                {/* Add New Newspaper */}
+                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Add New Newspaper</p>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="text"
+                      placeholder="Newspaper name"
+                      value={newNpName}
+                      onChange={(e) => setNewNpName(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddNewspaper()}
+                      className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(210,67%,23%)]/20 focus:border-[hsl(210,67%,23%)] bg-white"
+                    />
+                    <input
+                      type="number"
+                      placeholder="Rate (₹)"
+                      min={0}
+                      step={0.10}
+                      value={newNpRate}
+                      onChange={(e) => setNewNpRate(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddNewspaper()}
+                      className="w-full sm:w-28 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(210,67%,23%)]/20 focus:border-[hsl(210,67%,23%)] bg-white"
+                    />
+                    <button
+                      onClick={handleAddNewspaper}
+                      disabled={!newNpName.trim() || !newNpRate}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-[hsl(210,67%,23%)] text-white rounded-lg text-sm font-medium hover:bg-[hsl(210,67%,18%)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+                    >
+                      <Plus size={15} /> Add
+                    </button>
+                  </div>
+                </div>
+
+                {/* Newspaper List */}
+                <div className="overflow-x-auto rounded-xl border border-slate-100">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
+                        <th className="text-left px-4 py-3 font-semibold">#</th>
+                        <th className="text-left px-4 py-3 font-semibold">Name</th>
+                        <th className="text-center px-4 py-3 font-semibold">Rate (₹)</th>
+                        <th className="text-center px-4 py-3 font-semibold">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {newspapers.map((np, idx) => (
+                        <tr key={np.id} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="px-4 py-3 text-slate-400 text-xs">{idx + 1}</td>
+                          {editingNpId === np.id ? (
+                            <>
+                              <td className="px-4 py-2">
+                                <input
+                                  type="text"
+                                  value={editNpName}
+                                  onChange={(e) => setEditNpName(e.target.value)}
+                                  className="w-full border border-[hsl(210,67%,23%)] rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(210,67%,23%)]/20"
+                                  autoFocus
+                                />
+                              </td>
+                              <td className="px-4 py-2 text-center">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={0.10}
+                                  value={editNpRate}
+                                  onChange={(e) => setEditNpRate(e.target.value)}
+                                  className="w-20 text-center border border-[hsl(210,67%,23%)] rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(210,67%,23%)]/20"
+                                />
+                              </td>
+                              <td className="px-4 py-2 text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    onClick={() => handleSaveEdit(np.id)}
+                                    className="p-1.5 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
+                                    title="Save"
+                                  >
+                                    <Check size={14} />
+                                  </button>
+                                  <button
+                                    onClick={handleCancelEdit}
+                                    className="p-1.5 rounded-lg bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors"
+                                    title="Cancel"
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                </div>
+                              </td>
+                            </>
+                          ) : (
+                            <>
+                              <td className="px-4 py-3 font-medium text-slate-800">{np.name}</td>
+                              <td className="px-4 py-3 text-center text-slate-700">₹{np.rate.toFixed(2)}</td>
+                              <td className="px-4 py-3 text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    onClick={() => handleStartEdit(np)}
+                                    className="p-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+                                    title="Edit"
+                                  >
+                                    <Pencil size={14} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteConfirm(np.id)}
+                                    className="p-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors"
+                                    title="Delete"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              </td>
+                            </>
+                          )}
+                        </tr>
+                      ))}
+                      {newspapers.length === 0 && (
+                        <tr>
+                          <td colSpan={4} className="px-4 py-8 text-center text-slate-400 text-sm">
+                            No newspapers added yet.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <Trash2 size={18} className="text-red-500" />
+              </div>
+              <div>
+                <p className="font-semibold text-slate-800">Delete Newspaper</p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Deleting &quot;{newspapers.find((n) => n.id === deleteConfirmId)?.name}&quot;. Enter PIN to confirm.
+                </p>
+              </div>
+            </div>
+            <input
+              type="password"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="Enter PIN to confirm"
+              value={deletePinInput}
+              onChange={(e) => { setDeletePinInput(e.target.value); setDeletePinError(''); }}
+              onKeyDown={(e) => e.key === 'Enter' && handleDeleteWithPin()}
+              className="w-full text-center tracking-widest border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-300 focus:border-red-400"
+              autoFocus
+            />
+            {deletePinError && (
+              <p className="text-xs text-red-500 font-medium text-center">{deletePinError}</p>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setDeleteConfirmId(null); setDeletePinInput(''); setDeletePinError(''); }}
+                className="flex-1 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteWithPin}
+                className="flex-1 py-2 bg-red-500 text-white rounded-xl text-sm font-semibold hover:bg-red-600 transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

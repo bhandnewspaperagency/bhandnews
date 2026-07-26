@@ -15,6 +15,7 @@ const KEYS = {
   GROUPS: 'bhand_newspaper_groups',
   FREE_QTY: 'bhand_hawker_free_qty',
   COPIES: 'bhand_copies_tracker',
+  NEWSPAPERS_LIST: 'bhand_newspapers_list',
 };
 
 // ─── IndexedDB Backup ─────────────────────────────────────────────────────────
@@ -121,6 +122,7 @@ export async function restoreFromBackupIfNeeded(): Promise<void> {
     KEYS.FREE_QTY,
     KEYS.COPIES,
     KEYS.SEEDED,
+    KEYS.NEWSPAPERS_LIST,
   ];
 
   for (const key of persistedKeys) {
@@ -478,4 +480,49 @@ export function saveCopiesRecord(record: CopiesRecord): void {
 export function deleteCopiesRecord(id: string): void {
   const list = getCopiesRecords().filter((r) => r.id !== id);
   write(KEYS.COPIES, list);
+}
+
+// ─── Newspaper List Management ────────────────────────────────────────────────
+
+export interface NewspaperEntry {
+  id: string;
+  name: string;
+  rate: number;
+}
+
+export function getNewspaperList(): NewspaperEntry[] {
+  const stored = read<NewspaperEntry[]>(KEYS.NEWSPAPERS_LIST);
+  if (stored && stored.length > 0) return stored;
+  // Fall back to NEWSPAPERS from mockData
+  return NEWSPAPERS.map((n) => ({ id: n.name.toLowerCase().replace(/\s+/g, '_'), name: n.name, rate: n.rate }));
+}
+
+export function saveNewspaperList(list: NewspaperEntry[]): void {
+  write(KEYS.NEWSPAPERS_LIST, list);
+}
+
+export function addNewspaper(entry: Omit<NewspaperEntry, 'id'>): NewspaperEntry {
+  const list = getNewspaperList();
+  const newEntry: NewspaperEntry = {
+    id: `np_${Date.now()}`,
+    name: entry.name.trim(),
+    rate: entry.rate,
+  };
+  list.push(newEntry);
+  write(KEYS.NEWSPAPERS_LIST, list);
+  return newEntry;
+}
+
+export function updateNewspaper(id: string, updates: Partial<Omit<NewspaperEntry, 'id'>>): void {
+  const list = getNewspaperList();
+  const idx = list.findIndex((n) => n.id === id);
+  if (idx >= 0) {
+    list[idx] = { ...list[idx], ...updates };
+    write(KEYS.NEWSPAPERS_LIST, list);
+  }
+}
+
+export function deleteNewspaper(id: string): void {
+  const list = getNewspaperList().filter((n) => n.id !== id);
+  write(KEYS.NEWSPAPERS_LIST, list);
 }
