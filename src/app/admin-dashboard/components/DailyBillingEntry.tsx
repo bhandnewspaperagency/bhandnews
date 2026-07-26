@@ -623,6 +623,14 @@ export default function DailyBillingEntry() {
       setIsDataPreloaded(true);
       setSubmitted(true);
     } else {
+      // No existing record for this date — apply saved free qty settings
+      const saved = getFreeQtyForHawker(selectedHawker.id);
+      setRows(
+        newspapers.map((np) => {
+          const freeEntry = saved.find((e) => e.newspaper === np.name);
+          return { supplyQty: 0, returnQty: 0, freePvc: freeEntry ? freeEntry.freeQty : 0 };
+        })
+      );
       setIsDataPreloaded(false);
       setSubmitted(false);
     }
