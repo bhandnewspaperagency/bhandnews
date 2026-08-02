@@ -13,7 +13,7 @@ const LOKMAT_COUNT = 3;
 interface DailySummaryRow {
   hawkerId: number;
   hawkerName: string;
-  newspapers: Record<string, { supply: number; return: number; net: number; total: number }>;
+  newspapers: Record<string, { supply: number; return: number; net: number; total: number; rate: number; freePvc: number }>;
   totalBill: number;
   paymentStatus: string;
   paymentType: string;
@@ -135,6 +135,8 @@ export default function TrackerView() {
             return: e.returnQty,
             net: e.netQty,
             total: e.total,
+            rate: e.rate ?? 0,
+            freePvc: Math.max(0, e.supplyQty - e.netQty),
           };
         }
         const totalBill = filteredEntries.reduce((s, e) => s + e.total, 0);
@@ -541,7 +543,12 @@ export default function TrackerView() {
                   <th className="table-header text-left sticky left-0 bg-slate-50 z-10 w-10">#</th>
                   <th className="table-header text-left sticky left-10 bg-slate-50 z-10 min-w-[150px]">Hawker</th>
                   {visibleNPs.map((np) => (
-                    <th key={`dh-${np.name}`} className="table-header text-right min-w-[80px] whitespace-nowrap">{np.name}</th>
+                    <th key={`dh-${np.name}`} className="table-header text-center min-w-[160px] whitespace-nowrap" colSpan={3}>
+                      <div>{np.name}</div>
+                      <div className="flex justify-around text-[10px] font-normal text-slate-400 mt-0.5">
+                        <span>Rate</span><span>Free PVC</span><span>Total</span>
+                      </div>
+                    </th>
                   ))}
                   <th className="table-header text-right min-w-[100px] bg-[hsl(210,67%,97%)]">Total</th>
                   <th className="table-header text-center min-w-[80px]">Payment</th>
@@ -550,7 +557,7 @@ export default function TrackerView() {
               <tbody>
                 {dailyRows.length === 0 ? (
                   <tr>
-                    <td colSpan={4 + visibleNPs.length} className="text-center py-12 text-slate-400 text-sm">
+                    <td colSpan={4 + visibleNPs.length * 3} className="text-center py-12 text-slate-400 text-sm">
                       No billing records for {formatDate(selectedDate)}
                     </td>
                   </tr>
@@ -562,11 +569,26 @@ export default function TrackerView() {
                       </td>
                       <td className="table-cell sticky left-10 bg-inherit z-10 font-semibold text-slate-800 truncate max-w-[150px]">{row.hawkerName}</td>
                       {visibleNPs.map((np) => {
-                        const val = row.newspapers[np.name]?.total ?? 0;
+                        const entry = row.newspapers[np.name];
+                        const total = entry?.total ?? 0;
+                        const rate = entry?.rate ?? 0;
+                        const freePvc = entry?.freePvc ?? 0;
                         return (
-                          <td key={`dr-${row.hawkerId}-${np.name}`} className="table-cell text-right tabular-nums">
-                            {val > 0 ? <span className="text-slate-700">₹{val.toFixed(2)}</span> : <span className="text-slate-200">—</span>}
-                          </td>
+                          <React.Fragment key={`dr-${row.hawkerId}-${np.name}`}>
+                            <td className="table-cell text-center tabular-nums text-xs text-slate-500">
+                              {rate > 0 ? <span>₹{rate.toFixed(2)}</span> : <span className="text-slate-200">—</span>}
+                            </td>
+                            <td className="table-cell text-center tabular-nums">
+                              {freePvc > 0 ? (
+                                <span className="inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-700 text-xs font-semibold">{freePvc}</span>
+                              ) : (
+                                <span className="text-slate-200">—</span>
+                              )}
+                            </td>
+                            <td className="table-cell text-right tabular-nums">
+                              {total > 0 ? <span className="text-slate-700">₹{total.toFixed(2)}</span> : <span className="text-slate-200">—</span>}
+                            </td>
+                          </React.Fragment>
                         );
                       })}
                       <td className="table-cell text-right tabular-nums font-bold text-[hsl(210,67%,23%)] bg-[hsl(210,67%,98%)]">
@@ -589,7 +611,14 @@ export default function TrackerView() {
                     <td className="px-4 py-3 sticky left-10 bg-[hsl(210,67%,23%)] z-10 text-xs uppercase tracking-wide">Totals</td>
                     {visibleNPs.map((np) => {
                       const t = dailyRows.reduce((s, r) => s + (r.newspapers[np.name]?.total ?? 0), 0);
-                      return <td key={`dft-${np.name}`} className="px-4 py-3 text-right tabular-nums text-xs">₹{t.toFixed(0)}</td>;
+                      const totalFreePvc = dailyRows.reduce((s, r) => s + (r.newspapers[np.name]?.freePvc ?? 0), 0);
+                      return (
+                        <React.Fragment key={`dft-${np.name}`}>
+                          <td className="px-4 py-3 text-center tabular-nums text-xs opacity-60">—</td>
+                          <td className="px-4 py-3 text-center tabular-nums text-xs">{totalFreePvc > 0 ? totalFreePvc : '—'}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-xs">₹{t.toFixed(0)}</td>
+                        </React.Fragment>
+                      );
                     })}
                     <td className="px-4 py-3 text-right tabular-nums">
                       ₹{dailyRows.reduce((s, r) => s + r.totalBill, 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -610,9 +639,13 @@ export default function TrackerView() {
                       const isLokmat = idx < LOKMAT_COUNT;
                       const t = isLokmat ? dailyRows.reduce((s, r) => s + (r.newspapers[np.name]?.total ?? 0), 0) : 0;
                       return (
-                        <td key={`dft-tc-${np.name}`} className="px-4 py-2.5 text-right tabular-nums text-xs text-indigo-600">
-                          {isLokmat && t > 0 ? `₹${t.toFixed(0)}` : <span className="text-slate-200">—</span>}
-                        </td>
+                        <React.Fragment key={`dft-tc-${np.name}`}>
+                          <td className="px-4 py-2.5"></td>
+                          <td className="px-4 py-2.5"></td>
+                          <td className="px-4 py-2.5 text-right tabular-nums text-xs text-indigo-600">
+                            {isLokmat && t > 0 ? `₹${t.toFixed(0)}` : <span className="text-slate-200">—</span>}
+                          </td>
+                        </React.Fragment>
                       );
                     })}
                     <td className="px-4 py-2.5 text-right tabular-nums font-bold text-indigo-800">
@@ -634,9 +667,13 @@ export default function TrackerView() {
                       const isOther = idx >= LOKMAT_COUNT;
                       const t = isOther ? dailyRows.reduce((s, r) => s + (r.newspapers[np.name]?.total ?? 0), 0) : 0;
                       return (
-                        <td key={`dft-cash-${np.name}`} className="px-4 py-2.5 text-right tabular-nums text-xs text-emerald-600">
-                          {isOther && t > 0 ? `₹${t.toFixed(0)}` : <span className="text-slate-200">—</span>}
-                        </td>
+                        <React.Fragment key={`dft-cash-${np.name}`}>
+                          <td className="px-4 py-2.5"></td>
+                          <td className="px-4 py-2.5"></td>
+                          <td className="px-4 py-2.5 text-right tabular-nums text-xs text-emerald-600">
+                            {isOther && t > 0 ? `₹${t.toFixed(0)}` : <span className="text-slate-200">—</span>}
+                          </td>
+                        </React.Fragment>
                       );
                     })}
                     <td className="px-4 py-2.5 text-right tabular-nums font-bold text-emerald-800">

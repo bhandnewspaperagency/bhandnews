@@ -594,7 +594,7 @@ export default function DailyBillingEntry() {
     const rRates = newspapers.map((np) => getPreviousDayRate(np.name, billDate));
     setSupplyRates(sRates);
     setReturnRates(rRates);
-    // On Sunday, auto-zero supply qty for Lokmat SSA
+    // On Sunday, auto-zero supply qty for Lokmat SSA — preserve freePvc
     const sunday = new Date(billDate).getDay() === 0;
     if (sunday) {
       setRows((prev) =>
@@ -603,28 +603,34 @@ export default function DailyBillingEntry() {
         )
       );
     }
+    // NOTE: Do NOT reset freePvc here — that is managed by the hawker/date useEffect
   }, [billDate, newspapers]);
 
   // When hawker or date changes, try to load existing saved record
   useEffect(() => {
     if (!selectedHawker || !billDate || newspapers.length === 0) return;
     const existing = getExistingBillingRecord(selectedHawker.id, billDate);
+    const savedFreeQty = getFreeQtyForHawker(selectedHawker.id);
     if (existing && existing.entries.length > 0) {
       // Pre-populate rows from saved record
       const newRows = newspapers.map((np) => {
         const entry = existing.entries.find((e) => e.newspaper === np.name);
         if (entry) {
+          // Compute freePvc from saved netQty; if it's 0, fall back to saved free qty settings
+          const computedFreePvc = entry.netQty !== undefined
+            ? Math.max(0, entry.supplyQty - entry.netQty)
+            : 0;
+          const freeEntry = savedFreeQty.find((e) => e.newspaper === np.name);
+          // Use saved free qty settings as fallback if computed value is 0 but settings exist
+          const freePvc = computedFreePvc > 0 ? computedFreePvc : (freeEntry ? freeEntry.freeQty : 0);
           return {
             supplyQty: entry.supplyQty,
             returnQty: entry.returnQty,
-            freePvc: entry.netQty !== undefined
-              ? Math.max(0, entry.supplyQty - entry.netQty)
-              : 0,
+            freePvc,
           };
         }
-        // fallback: apply free qty settings
-        const saved = getFreeQtyForHawker(selectedHawker.id);
-        const freeEntry = saved.find((e) => e.newspaper === np.name);
+        // fallback: apply free qty settings for newspapers not in saved record
+        const freeEntry = savedFreeQty.find((e) => e.newspaper === np.name);
         return { supplyQty: 0, returnQty: 0, freePvc: freeEntry ? freeEntry.freeQty : 0 };
       });
       setRows(newRows);
@@ -633,10 +639,9 @@ export default function DailyBillingEntry() {
       setSubmitted(true);
     } else {
       // No existing record for this date — apply saved free qty settings
-      const saved = getFreeQtyForHawker(selectedHawker.id);
       setRows(
         newspapers.map((np) => {
-          const freeEntry = saved.find((e) => e.newspaper === np.name);
+          const freeEntry = savedFreeQty.find((e) => e.newspaper === np.name);
           return { supplyQty: 0, returnQty: 0, freePvc: freeEntry ? freeEntry.freeQty : 0 };
         })
       );
