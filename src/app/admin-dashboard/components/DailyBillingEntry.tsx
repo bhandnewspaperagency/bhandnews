@@ -594,6 +594,15 @@ export default function DailyBillingEntry() {
     const rRates = newspapers.map((np) => getPreviousDayRate(np.name, billDate));
     setSupplyRates(sRates);
     setReturnRates(rRates);
+    // On Sunday, auto-zero supply qty for Lokmat SSA
+    const sunday = new Date(billDate).getDay() === 0;
+    if (sunday) {
+      setRows((prev) =>
+        prev.map((row, i) =>
+          newspapers[i]?.name === 'Lokmat SSA' ? { ...row, supplyQty: 0 } : row
+        )
+      );
+    }
   }, [billDate, newspapers]);
 
   // When hawker or date changes, try to load existing saved record
@@ -647,8 +656,24 @@ export default function DailyBillingEntry() {
 
   const getNetQty = (i: number) => Math.max(0, (rows[i]?.supplyQty || 0) - (rows[i]?.freePvc || 0));
 
+  // Helper: check if a date string is a Sunday
+  const isSunday = (dateStr: string): boolean => {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    return d.getDay() === 0;
+  };
+
+  // Helper: check if newspaper at index i is Lokmat SSA
+  const isLokmtSSA = (i: number): boolean => newspapers[i]?.name === 'Lokmat SSA';
+
   // Total = (NetQty × bill date's rate) - (ReturnQty × previous day's rate)
+  // Special case: Lokmat SSA on Sunday → paper not supplied → total = -(ReturnQty × prevDayRate) [negative credit]
   const getTotal = (i: number) => {
+    if (isLokmtSSA(i) && isSunday(billDate)) {
+      // Sunday: no supply, only return credit (negative)
+      const ret = (rows[i]?.returnQty || 0) * returnRates[i];
+      return -ret;
+    }
     const netQty = getNetQty(i);
     const ret = (rows[i]?.returnQty || 0) * returnRates[i];
     return Math.max(0, netQty * supplyRates[i] - ret);
@@ -1315,14 +1340,28 @@ export default function DailyBillingEntry() {
             const netQty = getNetQty(i);
             const total = getTotal(i);
             const hasEntry = rows[i]?.supplyQty > 0;
+            const isSundaySSA = isLokmtSSA(i) && isSunday(billDate);
             return (
               <React.Fragment key={`mob-billing-${np.id}`}>
-                <div className={`px-4 py-3 space-y-2 ${hasEntry ? 'bg-[hsl(210,67%,98%)]' : ''}`}>
+                <div className={`px-4 py-3 space-y-2 ${isSundaySSA ? 'bg-orange-50/60' : hasEntry ? 'bg-[hsl(210,67%,98%)]' : ''}`}>
                   <div className="flex items-center justify-between">
-                    <span className={`text-sm font-semibold ${hasEntry ? 'text-[hsl(210,67%,23%)]' : 'text-slate-700'}`}>{np.name}</span>
-                    <span className={`font-mono text-sm font-bold ${total > 0 ? 'text-slate-900' : 'text-slate-300'}`}>
-                      {total > 0 ? `₹${total.toFixed(2)}` : '—'}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm font-semibold ${isSundaySSA ? 'text-orange-700' : hasEntry ? 'text-[hsl(210,67%,23%)]' : 'text-slate-700'}`}>{np.name}</span>
+                      {isSundaySSA && (
+                        <span className="text-[10px] font-semibold bg-orange-100 text-orange-600 border border-orange-200 px-1.5 py-0.5 rounded-full">
+                          Sunday
+                        </span>
+                      )}
+                    </div>
+                    {isSundaySSA ? (
+                      <span className={`font-mono text-sm font-bold ${total < 0 ? 'text-red-600' : 'text-slate-300'}`}>
+                        {total < 0 ? `-₹${Math.abs(total).toFixed(2)}` : '—'}
+                      </span>
+                    ) : (
+                      <span className={`font-mono text-sm font-bold ${total > 0 ? 'text-slate-900' : 'text-slate-300'}`}>
+                        {total > 0 ? `₹${total.toFixed(2)}` : '—'}
+                      </span>
+                    )}
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <div>
@@ -1331,9 +1370,10 @@ export default function DailyBillingEntry() {
                         type="number"
                         inputMode="numeric"
                         min={0}
-                        value={rows[i]?.supplyQty || ''}
-                        onChange={(e) => updateRow(i, 'supplyQty', e.target.value)}
-                        className="w-full text-center input-field text-sm tabular-nums min-h-[44px]"
+                        value={isSundaySSA ? 0 : (rows[i]?.supplyQty || '')}
+                        onChange={(e) => !isSundaySSA && updateRow(i, 'supplyQty', e.target.value)}
+                        readOnly={isSundaySSA}
+                        className={`w-full text-center input-field text-sm tabular-nums min-h-[44px] ${isSundaySSA ? 'bg-orange-50 text-orange-400 cursor-not-allowed border-orange-200' : ''}`}
                         placeholder="0"
                       />
                     </div>
@@ -1352,7 +1392,7 @@ export default function DailyBillingEntry() {
                     <div>
                       <label className="text-[10px] text-slate-400 block mb-1">Net / Free</label>
                       <div className="flex items-center gap-1">
-                        <span className={`font-mono text-sm font-semibold ${netQty > 0 ? 'text-[hsl(210,67%,23%)]' : 'text-slate-300'} flex-1 text-center`}>{netQty}</span>
+                        <span className={`font-mono text-sm font-semibold ${netQty > 0 ? 'text-[hsl(210,67%,23%)]' : 'text-slate-300'} flex-1 text-center`}>{isSundaySSA ? '—' : netQty}</span>
                         <span
                           className="w-14 text-center text-xs tabular-nums min-h-[44px] flex items-center justify-center bg-slate-100 border border-slate-200 rounded-lg text-slate-500 font-mono cursor-not-allowed select-none"
                           title="Edit via Free Qty Settings"
@@ -1447,18 +1487,26 @@ export default function DailyBillingEntry() {
                 const hasEntry = rows[i]?.supplyQty > 0;
                 const ratesDiffer = ratesAreDifferent(i);
                 const hasFreeQty = (rows[i]?.freePvc || 0) > 0;
+                const isSundaySSA = isLokmtSSA(i) && isSunday(billDate);
                 return (
                   <React.Fragment key={`billing-row-${np.id}`}>
                     <tr
                       className={`border-b border-[hsl(220,15%,93%)] transition-colors ${
-                        hasEntry ? 'bg-[hsl(210,67%,98%)]' : 'hover:bg-slate-50/60'
+                        isSundaySSA ? 'bg-orange-50/60' : hasEntry ? 'bg-[hsl(210,67%,98%)]' : 'hover:bg-slate-50/60'
                       }`}
                     >
                       <td className="table-cell text-xs text-slate-400 font-mono w-8">{i + 1}</td>
                       <td className="table-cell">
-                        <span className={`text-sm font-medium ${hasEntry ? 'text-[hsl(210,67%,23%)]' : 'text-slate-700'}`}>
-                          {np.name}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm font-medium ${isSundaySSA ? 'text-orange-700' : hasEntry ? 'text-[hsl(210,67%,23%)]' : 'text-slate-700'}`}>
+                            {np.name}
+                          </span>
+                          {isSundaySSA && (
+                            <span className="text-[10px] font-semibold bg-orange-100 text-orange-600 border border-orange-200 px-1.5 py-0.5 rounded-full">
+                              Sunday — No Paper
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="table-cell text-right font-mono text-sm text-slate-600">
                         {supplyRates[i]?.toFixed(2) ?? np.rate.toFixed(2)}
@@ -1473,9 +1521,10 @@ export default function DailyBillingEntry() {
                           type="number"
                           inputMode="numeric"
                           min={0}
-                          value={rows[i]?.supplyQty || ''}
-                          onChange={(e) => updateRow(i, 'supplyQty', e.target.value)}
-                          className="w-20 text-center input-field text-sm tabular-nums"
+                          value={isSundaySSA ? 0 : (rows[i]?.supplyQty || '')}
+                          onChange={(e) => !isSundaySSA && updateRow(i, 'supplyQty', e.target.value)}
+                          readOnly={isSundaySSA}
+                          className={`w-20 text-center input-field text-sm tabular-nums ${isSundaySSA ? 'bg-orange-50 text-orange-400 cursor-not-allowed border-orange-200' : ''}`}
                           placeholder="0"
                         />
                       </td>
@@ -1498,13 +1547,19 @@ export default function DailyBillingEntry() {
                       </td>
                       <td className="table-cell text-center bg-blue-50/40">
                         <span className={`font-mono text-sm font-semibold ${netQty > 0 ? 'text-[hsl(210,67%,23%)]' : 'text-slate-300'}`}>
-                          {netQty}
+                          {isSundaySSA ? '—' : netQty}
                         </span>
                       </td>
                       <td className="table-cell text-right bg-blue-50/40">
-                        <span className={`font-mono text-sm font-semibold ${total > 0 ? 'text-slate-900' : 'text-slate-300'}`}>
-                          {total > 0 ? `₹${total.toFixed(2)}` : '—'}
-                        </span>
+                        {isSundaySSA ? (
+                          <span className={`font-mono text-sm font-semibold ${total < 0 ? 'text-red-600' : 'text-slate-300'}`}>
+                            {total < 0 ? `-₹${Math.abs(total).toFixed(2)}` : '—'}
+                          </span>
+                        ) : (
+                          <span className={`font-mono text-sm font-semibold ${total > 0 ? 'text-slate-900' : 'text-slate-300'}`}>
+                            {total > 0 ? `₹${total.toFixed(2)}` : '—'}
+                          </span>
+                        )}
                       </td>
                     </tr>
                     {/* Lokmat subtotal row after 3rd newspaper */}
