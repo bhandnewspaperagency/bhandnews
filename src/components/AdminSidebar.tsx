@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Newspaper, LayoutDashboard, Users, ClipboardList, BarChart3, Settings, ChevronLeft, ChevronRight, LogOut, Calendar,  } from 'lucide-react';
+import { Newspaper, LayoutDashboard, Users, ClipboardList, BarChart3, Settings, ChevronLeft, ChevronRight, LogOut, Calendar, IndianRupee, Activity, Layers, HardDriveDownload, X, BookCopy } from 'lucide-react';
 
 interface NavItem {
   id: string;
@@ -15,9 +15,14 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} />, section: 'MAIN' },
   { id: 'billing', label: 'Daily Billing', icon: <ClipboardList size={18} />, badge: 5, section: 'MAIN' },
+  { id: 'rates', label: 'Rate Management', icon: <IndianRupee size={18} />, section: 'MAIN' },
   { id: 'hawkers', label: 'Hawker Registry', icon: <Users size={18} />, section: 'MAIN' },
   { id: 'monthly', label: 'Monthly Tracker', icon: <Calendar size={18} />, section: 'MAIN' },
+  { id: 'tracker', label: 'Tracker', icon: <Activity size={18} />, section: 'MAIN' },
+  { id: 'copies-tracker', label: 'Copies Tracker', icon: <BookCopy size={18} />, section: 'MAIN' },
+  { id: 'groups', label: 'Newspaper Groups', icon: <Layers size={18} />, section: 'MAIN' },
   { id: 'reports', label: 'Reports', icon: <BarChart3 size={18} />, section: 'REPORTS' },
+  { id: 'backup', label: 'Backup & Restore', icon: <HardDriveDownload size={18} />, section: 'SYSTEM' },
   { id: 'settings', label: 'Settings', icon: <Settings size={18} />, section: 'SYSTEM' },
 ];
 
@@ -35,7 +40,7 @@ export default function AdminSidebar({ activeSection, onSectionChange }: AdminSi
   return (
     <aside
       className={`flex flex-col bg-white border-r border-[hsl(220,15%,88%)] h-screen sticky top-0 transition-all duration-300 ease-in-out ${
-        collapsed ? 'w-16' : 'w-60'
+        collapsed ? 'w-16' : 'w-64 lg:w-60'
       } flex-shrink-0 z-20`}
     >
       {/* Logo */}
@@ -44,10 +49,20 @@ export default function AdminSidebar({ activeSection, onSectionChange }: AdminSi
           <Newspaper size={18} className="text-white" />
         </div>
         {!collapsed && (
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="text-slate-900 font-bold text-sm leading-tight truncate">Bhand News</div>
             <div className="text-slate-400 text-xs">Paper Agency</div>
           </div>
+        )}
+        {/* Close button — mobile only */}
+        {!collapsed && (
+          <button
+            onClick={() => onSectionChange(activeSection)}
+            className="lg:hidden ml-auto text-slate-400 hover:text-slate-600 p-1"
+            aria-label="Close menu"
+          >
+            <X size={18} />
+          </button>
         )}
       </div>
 
@@ -65,7 +80,7 @@ export default function AdminSidebar({ activeSection, onSectionChange }: AdminSi
                 key={`nav-${item.id}`}
                 onClick={() => onSectionChange(item.id)}
                 title={collapsed ? item.label : undefined}
-                className={`sidebar-link w-full mb-0.5 relative group ${
+                className={`sidebar-link w-full mb-0.5 relative group min-h-[44px] ${
                   activeSection === item.id ? 'sidebar-link-active' : 'sidebar-link-inactive'
                 } ${collapsed ? 'justify-center px-2' : ''}`}
               >
@@ -97,14 +112,14 @@ export default function AdminSidebar({ activeSection, onSectionChange }: AdminSi
         <button
           onClick={() => router.push('/sign-up-login-screen')}
           title={collapsed ? 'Logout' : undefined}
-          className={`sidebar-link w-full text-red-600 hover:bg-red-50 hover:text-red-700 ${collapsed ? 'justify-center px-2' : ''}`}
+          className={`sidebar-link w-full text-red-600 hover:bg-red-50 hover:text-red-700 min-h-[44px] ${collapsed ? 'justify-center px-2' : ''}`}
         >
           <LogOut size={18} />
           {!collapsed && <span>Logout</span>}
         </button>
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className={`sidebar-link w-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 mt-1 ${collapsed ? 'justify-center px-2' : 'justify-between'}`}
+          className={`sidebar-link w-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 mt-1 min-h-[44px] ${collapsed ? 'justify-center px-2' : 'justify-between'}`}
         >
           {!collapsed && <span className="text-xs">Collapse</span>}
           {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}

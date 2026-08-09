@@ -1,17 +1,6 @@
 'use client';
 
-import {
-  Hawker,
-  DailyBillingRecord,
-  MonthlyTrackerRow,
-  MASTER_DATA,
-  MOCK_DAILY_BILLING,
-  MOCK_MONTHLY_TRACKER,
-  NEWSPAPERS,
-  MONTHLY_CHART_DATA,
-  NEWSPAPER_VOLUME_DATA,
-  PAYMENT_STATUS_DATA,
-} from './mockData';
+import { Hawker, DailyBillingRecord, MonthlyTrackerRow, MASTER_DATA, NEWSPAPERS, MONTHLY_CHART_DATA, NEWSPAPER_VOLUME_DATA, PAYMENT_STATUS_DATA,  } from './mockData';
 
 export type { Hawker, DailyBillingRecord, MonthlyTrackerRow };
 export { NEWSPAPERS, MONTHLY_CHART_DATA, NEWSPAPER_VOLUME_DATA, PAYMENT_STATUS_DATA };
@@ -21,8 +10,69 @@ const KEYS = {
   BILLING: 'bhand_billing',
   MONTHLY: 'bhand_monthly',
   AUTH: 'bhand_auth_session',
-  SEEDED: 'bhand_seeded_v1',
+  SEEDED: 'bhand_seeded_v2',   // bumped version so old seed flag is ignored
+  RATES: 'bhand_newspaper_rates',
+  GROUPS: 'bhand_newspaper_groups',
+  FREE_QTY: 'bhand_hawker_free_qty',
+  COPIES: 'bhand_copies_tracker',
+  NEWSPAPERS_LIST: 'bhand_newspapers_list',
 };
+
+// ─── IndexedDB Backup ─────────────────────────────────────────────────────────
+// All writes are mirrored to IndexedDB so data survives localStorage clears.
+
+const IDB_NAME = 'bhand_backup_db';
+const IDB_STORE = 'kv_store';
+const IDB_VERSION = 1;
+
+let _idbReady: Promise<IDBDatabase> | null = null;
+
+function openIDB(): Promise<IDBDatabase> {
+  if (_idbReady) return _idbReady;
+  _idbReady = new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') {
+      reject(new Error('IndexedDB not available'));
+      return;
+    }
+    const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore(IDB_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return _idbReady;
+}
+
+async function idbWrite(key: string, value: string): Promise<void> {
+  try {
+    const db = await openIDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).put(value, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve(); // silent fail
+    });
+  } catch {
+    // IndexedDB not available — silently ignore
+  }
+}
+
+async function idbRead(key: string): Promise<string | null> {
+  try {
+    const db = await openIDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const req = tx.objectStore(IDB_STORE).get(key);
+      req.onsuccess = () => resolve(req.result ?? null);
+      req.onerror = () => resolve(null);
+    });
+  } catch {
+    return null;
+  }
+}
+
+// ─── Core Read / Write ────────────────────────────────────────────────────────
 
 function isBrowser() {
   return typeof window !== 'undefined';
@@ -38,22 +88,77 @@ function read<T>(key: string): T | null {
   }
 }
 
+/**
+ * Write to localStorage AND mirror to IndexedDB backup.
+ * IndexedDB is the safety net — if localStorage is ever cleared,
+ * the next call to restoreFromBackupIfNeeded() will recover all data.
+ */
 function write<T>(key: string, value: T): void {
   if (!isBrowser()) return;
   try {
-    localStorage.setItem(key, JSON.stringify(value));
+    const serialised = JSON.stringify(value);
+    localStorage.setItem(key, serialised);
+    // Mirror to IndexedDB asynchronously (fire-and-forget)
+    idbWrite(key, serialised).catch(() => {});
   } catch {
-    // storage quota exceeded — silently ignore
+    // storage quota exceeded — still try IndexedDB
+    idbWrite(key, JSON.stringify(value)).catch(() => {});
   }
 }
 
+/**
+ * Restore all persisted keys from IndexedDB into localStorage.
+ * Called once on app boot — recovers data if localStorage was cleared.
+ */
+export async function restoreFromBackupIfNeeded(): Promise<void> {
+  if (!isBrowser()) return;
+
+  const persistedKeys = [
+    KEYS.HAWKERS,
+    KEYS.BILLING,
+    KEYS.MONTHLY,
+    KEYS.RATES,
+    KEYS.GROUPS,
+    KEYS.FREE_QTY,
+    KEYS.COPIES,
+    KEYS.SEEDED,
+    KEYS.NEWSPAPERS_LIST,
+  ];
+
+  for (const key of persistedKeys) {
+    // Only restore if localStorage is missing this key
+    if (localStorage.getItem(key) === null) {
+      const backup = await idbRead(key);
+      if (backup !== null) {
+        try {
+          localStorage.setItem(key, backup);
+        } catch {
+          // quota — skip
+        }
+      }
+    }
+  }
+}
+
+// ─── Seeding ──────────────────────────────────────────────────────────────────
+/**
+ * SAFE seed: only seeds hawkers if none exist at all.
+ * NEVER overwrites billing records, Free PVC settings, or any other real data.
+ */
 export function seedIfNeeded(): void {
   if (!isBrowser()) return;
-  if (localStorage.getItem(KEYS.SEEDED)) return;
-  write(KEYS.HAWKERS, MASTER_DATA);
-  write(KEYS.BILLING, MOCK_DAILY_BILLING);
-  write(KEYS.MONTHLY, MOCK_MONTHLY_TRACKER);
-  localStorage.setItem(KEYS.SEEDED, '1');
+
+  // Seed hawkers only if the hawkers key is completely absent
+  if (localStorage.getItem(KEYS.HAWKERS) === null) {
+    write(KEYS.HAWKERS, MASTER_DATA);
+  }
+
+  // Mark as seeded so we don't re-check unnecessarily
+  if (!localStorage.getItem(KEYS.SEEDED)) {
+    localStorage.setItem(KEYS.SEEDED, '1');
+    // Also persist the seed flag to IndexedDB
+    idbWrite(KEYS.SEEDED, '1').catch(() => {});
+  }
 }
 
 // ─── Hawkers ────────────────────────────────────────────────────────────────
@@ -95,8 +200,7 @@ export function getHawkerById(id: number): Hawker | undefined {
 // ─── Billing ─────────────────────────────────────────────────────────────────
 
 export function getBillingRecords(): DailyBillingRecord[] {
-  seedIfNeeded();
-  return read<DailyBillingRecord[]>(KEYS.BILLING) ?? MOCK_DAILY_BILLING;
+  return read<DailyBillingRecord[]>(KEYS.BILLING) ?? [];
 }
 
 export function saveBillingRecord(record: DailyBillingRecord): void {
@@ -120,11 +224,27 @@ export function getTodayBilling(date: string): DailyBillingRecord[] {
   return getBillingRecords().filter((b) => b.date === date);
 }
 
+export function getExistingBillingRecord(hawkerId: number, date: string): DailyBillingRecord | null {
+  const records = getBillingRecords();
+  return records.find((b) => b.hawkerId === hawkerId && b.date === date) ?? null;
+}
+
+export function deleteBillingRecordForHawkerDate(hawkerId: number, date: string): void {
+  const list = getBillingRecords();
+  const filtered = list.filter((b) => !(b.hawkerId === hawkerId && b.date === date));
+  write(KEYS.BILLING, filtered);
+  rebuildMonthlyTracker();
+}
+
 // ─── Monthly Tracker ─────────────────────────────────────────────────────────
 
 export function getMonthlyTracker(): MonthlyTrackerRow[] {
-  seedIfNeeded();
-  return read<MonthlyTrackerRow[]>(KEYS.MONTHLY) ?? MOCK_MONTHLY_TRACKER;
+  return read<MonthlyTrackerRow[]>(KEYS.MONTHLY) ?? [];
+}
+
+export function resetMonthlyTracker(): void {
+  if (!isBrowser()) return;
+  write(KEYS.MONTHLY, []);
 }
 
 function rebuildMonthlyTracker(): void {
@@ -197,4 +317,215 @@ export function loginHawker(name: string, contact: string): Hawker | null {
     return hawker;
   }
   return null;
+}
+
+// ─── Newspaper Rates ──────────────────────────────────────────────────────────
+
+export interface NewspaperRateEntry {
+  newspaper: string;
+  rate: number;
+}
+
+export interface DailyRateRecord {
+  date: string; // YYYY-MM-DD
+  rates: NewspaperRateEntry[];
+}
+
+export function getAllRates(): DailyRateRecord[] {
+  return read<DailyRateRecord[]>(KEYS.RATES) ?? [];
+}
+
+export function getRateForDate(newspaper: string, date: string): number {
+  const all = getAllRates();
+  const sorted = [...all].sort((a, b) => b.date.localeCompare(a.date));
+  for (const record of sorted) {
+    if (record.date <= date) {
+      const entry = record.rates.find((r) => r.newspaper === newspaper);
+      if (entry !== undefined) return entry.rate;
+    }
+  }
+  // Fall back to dynamic newspaper list rate, then static NEWSPAPERS
+  const dynamicNp = getNewspaperList().find((n) => n.name === newspaper);
+  if (dynamicNp) return dynamicNp.rate;
+  const np = NEWSPAPERS.find((n) => n.name === newspaper);
+  return np?.rate ?? 0;
+}
+
+export function getPreviousDayRate(newspaper: string, date: string): number {
+  const all = getAllRates();
+  const sorted = [...all].sort((a, b) => b.date.localeCompare(a.date));
+  for (const record of sorted) {
+    if (record.date < date) {
+      const entry = record.rates.find((r) => r.newspaper === newspaper);
+      if (entry !== undefined) return entry.rate;
+    }
+  }
+  return getRateForDate(newspaper, date);
+}
+
+export function saveRatesForDate(date: string, rates: NewspaperRateEntry[]): void {
+  const all = getAllRates();
+  const idx = all.findIndex((r) => r.date === date);
+  if (idx >= 0) {
+    all[idx] = { date, rates };
+  } else {
+    all.push({ date, rates });
+  }
+  write(KEYS.RATES, all);
+}
+
+export function deleteRatesForDate(date: string): void {
+  const all = getAllRates().filter((r) => r.date !== date);
+  write(KEYS.RATES, all);
+}
+
+export function getRatesForDate(date: string): NewspaperRateEntry[] | null {
+  const record = getAllRates().find((r) => r.date === date);
+  return record?.rates ?? null;
+}
+
+// ─── Newspaper Groups ─────────────────────────────────────────────────────────
+
+export interface NewspaperGroup {
+  id: string;
+  name: string;
+  newspapers: string[];
+  color?: string;
+}
+
+export function getNewspaperGroups(): NewspaperGroup[] {
+  return read<NewspaperGroup[]>(KEYS.GROUPS) ?? [];
+}
+
+export function saveNewspaperGroup(group: NewspaperGroup): NewspaperGroup {
+  const list = getNewspaperGroups();
+  const idx = list.findIndex((g) => g.id === group.id);
+  if (idx >= 0) {
+    list[idx] = group;
+  } else {
+    const newGroup = { ...group, id: group.id || `grp-${Date.now()}` };
+    list.push(newGroup);
+    write(KEYS.GROUPS, list);
+    return newGroup;
+  }
+  write(KEYS.GROUPS, list);
+  return group;
+}
+
+export function deleteNewspaperGroup(id: string): void {
+  const list = getNewspaperGroups().filter((g) => g.id !== id);
+  write(KEYS.GROUPS, list);
+}
+
+// ─── Hawker Free Qty Settings ─────────────────────────────────────────────────
+
+export interface HawkerFreeQtyEntry {
+  newspaper: string;
+  freeQty: number;
+}
+
+export interface HawkerFreeQtySettings {
+  hawkerId: number;
+  entries: HawkerFreeQtyEntry[];
+}
+
+export function getAllFreeQtySettings(): HawkerFreeQtySettings[] {
+  return read<HawkerFreeQtySettings[]>(KEYS.FREE_QTY) ?? [];
+}
+
+export function getFreeQtyForHawker(hawkerId: number): HawkerFreeQtyEntry[] {
+  const all = getAllFreeQtySettings();
+  return all.find((s) => s.hawkerId === hawkerId)?.entries ?? [];
+}
+
+export function saveFreeQtyForHawker(hawkerId: number, entries: HawkerFreeQtyEntry[]): void {
+  const all = getAllFreeQtySettings();
+  const idx = all.findIndex((s) => s.hawkerId === hawkerId);
+  if (idx >= 0) {
+    all[idx] = { hawkerId, entries };
+  } else {
+    all.push({ hawkerId, entries });
+  }
+  write(KEYS.FREE_QTY, all);
+}
+
+// ─── Copies Tracker ───────────────────────────────────────────────────────────
+
+export interface CopiesEntry {
+  newspaper: string;
+  supply: number;
+  returned: number;
+}
+
+export interface CopiesRecord {
+  id: string;
+  hawkerId: number;
+  hawkerName: string;
+  date: string;
+  entries: CopiesEntry[];
+}
+
+export function getCopiesRecords(): CopiesRecord[] {
+  return read<CopiesRecord[]>(KEYS.COPIES) ?? [];
+}
+
+export function saveCopiesRecord(record: CopiesRecord): void {
+  const list = getCopiesRecords();
+  const idx = list.findIndex((r) => r.id === record.id);
+  if (idx >= 0) {
+    list[idx] = record;
+  } else {
+    list.push(record);
+  }
+  write(KEYS.COPIES, list);
+}
+
+export function deleteCopiesRecord(id: string): void {
+  const list = getCopiesRecords().filter((r) => r.id !== id);
+  write(KEYS.COPIES, list);
+}
+
+// ─── Newspaper List Management ────────────────────────────────────────────────
+
+export interface NewspaperEntry {
+  id: string;
+  name: string;
+  rate: number;
+}
+
+export function getNewspaperList(): NewspaperEntry[] {
+  const stored = read<NewspaperEntry[]>(KEYS.NEWSPAPERS_LIST);
+  if (stored && stored.length > 0) return stored;
+  // Fall back to NEWSPAPERS from mockData
+  return NEWSPAPERS.map((n) => ({ id: n.name.toLowerCase().replace(/\s+/g, '_'), name: n.name, rate: n.rate }));
+}
+
+export function saveNewspaperList(list: NewspaperEntry[]): void {
+  write(KEYS.NEWSPAPERS_LIST, list);
+}
+
+export function addNewspaper(entry: Omit<NewspaperEntry, 'id'>): NewspaperEntry {
+  const list = getNewspaperList();
+  const newEntry: NewspaperEntry = {
+    id: `np_${Date.now()}`,
+    name: entry.name.trim(),
+    rate: entry.rate,
+  };
+  list.push(newEntry);
+  write(KEYS.NEWSPAPERS_LIST, list);
+  return newEntry;
+}
+
+export function updateNewspaper(id: string, updates: Partial<Omit<NewspaperEntry, 'id'>>): void {
+  const list = getNewspaperList();
+  const idx = list.findIndex((n) => n.id === id);
+  if (idx >= 0) {
+    list[idx] = { ...list[idx], ...updates };
+    write(KEYS.NEWSPAPERS_LIST, list);
+  }
+}
+
+export function deleteNewspaper(id: string): void {
+  const list = getNewspaperList().filter((n) => n.id !== id);
+  write(KEYS.NEWSPAPERS_LIST, list);
 }

@@ -3,10 +3,11 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Newspaper, LogOut, IndianRupee, Calendar, BookOpen, CheckCircle2, Clock, AlertTriangle, Printer } from 'lucide-react';
-import { getSession, clearSession, getBillingByHawker, getMonthlyTracker, getHawkerById } from '@/lib/storage';
-import type { DailyBillingRecord, MonthlyTrackerRow, Hawker } from '@/lib/storage';
+import { getSession, clearSession, getBillingByHawker, getMonthlyTracker, getHawkerById, restoreFromBackupIfNeeded } from '@/lib/cloudStorage';
+import type { DailyBillingRecord, MonthlyTrackerRow, Hawker } from '@/lib/cloudStorage';
 import HawkerBillingTable from './HawkerBillingTable';
 import HawkerMonthlyView from './HawkerMonthlyView';
+import SyncStatusBadge from '@/components/ui/SyncStatusBadge';
 
 export default function HawkerDashboardClient() {
   const router = useRouter();
@@ -16,20 +17,27 @@ export default function HawkerDashboardClient() {
   const [myMonthly, setMyMonthly] = useState<MonthlyTrackerRow | undefined>(undefined);
 
   useEffect(() => {
-    const session = getSession();
-    if (!session || session.role !== 'hawker' || !session.hawkerId) {
-      router.push('/sign-up-login-screen');
-      return;
-    }
-    const h = getHawkerById(session.hawkerId);
-    if (!h) {
-      router.push('/sign-up-login-screen');
-      return;
-    }
-    setHawker(h);
-    setMyBills(getBillingByHawker(session.hawkerId));
-    const monthly = getMonthlyTracker().find((m) => m.hawkerId === session.hawkerId);
-    setMyMonthly(monthly);
+    restoreFromBackupIfNeeded().then(() => {
+      const session = getSession();
+      if (!session || session.role !== 'hawker' || !session.hawkerId) {
+        router.push('/sign-up-login-screen');
+        return;
+      }
+      getHawkerById(session.hawkerId).then((h) => {
+        if (!h) {
+          router.push('/sign-up-login-screen');
+          return;
+        }
+        setHawker(h);
+        Promise.all([
+          getBillingByHawker(session.hawkerId!),
+          getMonthlyTracker(),
+        ]).then(([bills, monthly]) => {
+          setMyBills(bills);
+          setMyMonthly(monthly.find((m) => m.hawkerId === session.hawkerId));
+        });
+      });
+    });
   }, [router]);
 
   const handleLogout = () => {
@@ -117,6 +125,8 @@ export default function HawkerDashboardClient() {
             <Printer size={14} />
             Print
           </button>
+          {/* Sync status badge */}
+          <SyncStatusBadge />
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-[hsl(36,80%,52%)] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
               {hawker.name.charAt(0)}
