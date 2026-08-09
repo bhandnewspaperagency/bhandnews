@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Eye, EyeOff, Newspaper, Shield, User, Phone, Lock, Mail, Copy, CheckCircle, LogIn } from 'lucide-react';
+import { Eye, EyeOff, Newspaper, Shield, User, Phone, Lock, Mail, LogIn } from 'lucide-react';
 import { loginAdmin, loginHawker } from '@/lib/cloudStorage';
 
 interface AdminFormValues {
@@ -18,30 +18,6 @@ interface HawkerFormValues {
   contactNumber: string;
 }
 
-const DEMO_HAWKERS = [
-  { name: 'AJAY BAGUL', contact: '9876543201' },
-  { name: 'AJIT BORSE', contact: '9876543202' },
-  { name: 'AMOL SHIMPI', contact: '9876543203' },
-];
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  const handleCopy = () => {
-    navigator.clipboard.writeText(text).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-  return (
-    <button
-      onClick={handleCopy}
-      className="ml-1 p-0.5 rounded hover:bg-slate-200 transition-colors"
-      title="Copy to clipboard"
-      type="button"
-    >
-      {copied ? <CheckCircle size={13} className="text-green-600" /> : <Copy size={13} className="text-slate-400" />}
-    </button>
-  );
-}
 
 export default function LoginPageClient() {
   const router = useRouter();
@@ -91,16 +67,6 @@ export default function LoginPageClient() {
       toast.error('Login failed. Verify your name and contact number.');
     }
     setIsLoading(false);
-  };
-
-  const autofillAdmin = () => {
-    adminForm.setValue('email', 'Bhandnewspaperagency@gmail.com');
-    adminForm.setValue('password', 'Bhand8830667147');
-  };
-
-  const autofillHawker = (name: string, contact: string) => {
-    hawkerForm.setValue('hawkerName', name);
-    hawkerForm.setValue('contactNumber', contact);
   };
 
   return (
@@ -276,30 +242,6 @@ export default function LoginPageClient() {
                   {isLoading ? 'Signing in…' : 'Sign In as Admin'}
                 </button>
               </form>
-
-              {/* Demo credentials */}
-              <div className="mt-6 p-4 rounded-xl bg-slate-50 border border-[hsl(220,15%,88%)]">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Demo Credentials</p>
-                <div className="space-y-1.5 text-xs text-slate-600">
-                  <div className="flex items-center gap-1">
-                    <span className="text-slate-400 w-16">Email:</span>
-                    <code className="font-mono">Bhandnewspaperagency@gmail.com</code>
-                    <CopyButton text="Bhandnewspaperagency@gmail.com" />
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-slate-400 w-16">Password:</span>
-                    <code className="font-mono">Bhand8830667147</code>
-                    <CopyButton text="Bhand8830667147" />
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={autofillAdmin}
-                  className="mt-3 text-xs font-semibold text-[hsl(210,67%,23%)] hover:underline"
-                >
-                  Autofill credentials →
-                </button>
-              </div>
             </div>
           )}
 
@@ -364,28 +306,6 @@ export default function LoginPageClient() {
                   {isLoading ? 'Signing in…' : 'Sign In as Hawker'}
                 </button>
               </form>
-
-              {/* Demo hawker accounts */}
-              <div className="mt-6 p-4 rounded-xl bg-slate-50 border border-[hsl(220,15%,88%)]">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Demo Hawker Accounts</p>
-                <div className="space-y-2">
-                  {DEMO_HAWKERS.map((h) => (
-                    <div key={`demo-${h.contact}`} className="flex items-center justify-between text-xs">
-                      <div>
-                        <span className="font-semibold text-slate-700">{h.name}</span>
-                        <span className="text-slate-400 ml-2 font-mono">{h.contact}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => autofillHawker(h.name, h.contact)}
-                        className="text-[hsl(210,67%,23%)] font-semibold hover:underline"
-                      >
-                        Use →
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </div>
           )}
         </div>
