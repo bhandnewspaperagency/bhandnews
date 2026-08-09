@@ -267,15 +267,19 @@ export const MONTHLY_CHART_DATA = [
 
 export const NEWSPAPER_VOLUME_DATA = [
   { name: 'Lokmat CNX', netQty: 1240 },
-  { name: 'Maharashtra Times', netQty: 890 },
-  { name: 'Times of India', netQty: 720 },
-  { name: 'Sakal', netQty: 680 },
+  { name: 'Lokmat SSA', netQty: 420 },
+  { name: 'Lokmat L.T.', netQty: 340 },
+  { name: 'Punya', netQty: 290 },
   { name: 'Deshdoot', netQty: 610 },
   { name: 'Pudhari', netQty: 540 },
   { name: 'Navbharat', netQty: 480 },
-  { name: 'Lokmat SSA', netQty: 420 },
-  { name: 'Saamana', netQty: 380 },
-  { name: 'Lokmat L.T.', netQty: 340 },
+  { name: 'Navrashtra', netQty: 260 },
+  { name: 'Samna', netQty: 380 },
+  { name: 'Pratkshya', netQty: 210 },
+  { name: 'Yasho', netQty: 175 },
+  { name: 'Eng Deshdoot', netQty: 140 },
+  { name: 'Chaufer', netQty: 120 },
+  { name: 'Samrat', netQty: 95 },
 ];
 
 export const PAYMENT_STATUS_DATA = [

@@ -473,8 +473,7 @@ export async function deleteCopiesRecord(id: string): Promise<void> {
 export async function getNewspaperList(): Promise<NewspaperEntry[]> {
   const { data, error } = await supabase()
     .from('newspapers_list')
-    .select('*')
-    .order('name', { ascending: true });
+    .select('*');
   if (error) {
     console.error('getNewspaperList error:', error.message);
     return NEWSPAPERS.map((n) => ({
@@ -491,7 +490,14 @@ export async function getNewspaperList(): Promise<NewspaperEntry[]> {
       rate: n.rate,
     }));
   }
-  return data.map((row) => ({ id: row.id, name: row.name, rate: Number(row.rate) }));
+  // Sort by canonical NEWSPAPERS order; unknown names go to end
+  const orderMap = new Map(NEWSPAPERS.map((n, i) => [n.name, i]));
+  const sorted = [...data].sort((a, b) => {
+    const ai = orderMap.has(a.name) ? orderMap.get(a.name)! : 9999;
+    const bi = orderMap.has(b.name) ? orderMap.get(b.name)! : 9999;
+    return ai - bi;
+  });
+  return sorted.map((row) => ({ id: row.id, name: row.name, rate: Number(row.rate) }));
 }
 
 async function seedNewspaperList(): Promise<void> {
