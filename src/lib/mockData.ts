@@ -45,17 +45,13 @@ export const NEWSPAPERS: { name: string; rate: number }[] = [
   { name: 'Deshdoot', rate: 3.50 },
   { name: 'Pudhari', rate: 3.50 },
   { name: 'Navbharat', rate: 3.50 },
-  { name: 'Navbharat Ravi', rate: 4.20 },
   { name: 'Navrashtra', rate: 2.80 },
-  { name: 'Saamana', rate: 3.20 },
-  { name: 'Pratyaksh', rate: 3.50 },
+  { name: 'Samna', rate: 3.20 },
+  { name: 'Pratkshya', rate: 3.50 },
   { name: 'Yasho', rate: 4.20 },
-  { name: 'ENG Deshdoot', rate: 1.80 },
+  { name: 'Eng Deshdoot', rate: 1.80 },
   { name: 'Chaufer', rate: 4.20 },
   { name: 'Samrat', rate: 4.40 },
-  { name: 'Sakal', rate: 4.00 },
-  { name: 'Maharashtra Times', rate: 4.00 },
-  { name: 'Times of India', rate: 5.00 },
 ];
 
 export const MASTER_DATA: Hawker[] = [
