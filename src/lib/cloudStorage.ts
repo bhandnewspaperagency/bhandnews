@@ -575,7 +575,7 @@ export function clearSession(): void {
 }
 
 export function loginAdmin(email: string, password: string): boolean {
-  if (email === 'Bhandnews.in' && password === '8830667147') {
+  if (email === 'Bhandnewspaperagency@gmail.com' && password === 'Bhand8830667147') {
     setSession({ role: 'admin' });
     return true;
   }

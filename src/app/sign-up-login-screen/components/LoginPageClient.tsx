@@ -94,8 +94,8 @@ export default function LoginPageClient() {
   };
 
   const autofillAdmin = () => {
-    adminForm.setValue('email', 'Bhandnews.in');
-    adminForm.setValue('password', '8830667147');
+    adminForm.setValue('email', 'Bhandnewspaperagency@gmail.com');
+    adminForm.setValue('password', 'Bhand8830667147');
   };
 
   const autofillHawker = (name: string, contact: string) => {
@@ -226,7 +226,7 @@ export default function LoginPageClient() {
                     <input
                       id="admin-email"
                       type="email"
-                      placeholder="admin@bhandnews.in"
+                      placeholder="Bhandnewspaperagency@gmail.com"
                       className="input-field pl-9"
                       {...adminForm.register('email', {
                         required: 'Email is required',
@@ -283,13 +283,13 @@ export default function LoginPageClient() {
                 <div className="space-y-1.5 text-xs text-slate-600">
                   <div className="flex items-center gap-1">
                     <span className="text-slate-400 w-16">Email:</span>
-                    <code className="font-mono">admin@bhandnews.in</code>
-                    <CopyButton text="admin@bhandnews.in" />
+                    <code className="font-mono">Bhandnewspaperagency@gmail.com</code>
+                    <CopyButton text="Bhandnewspaperagency@gmail.com" />
                   </div>
                   <div className="flex items-center gap-1">
                     <span className="text-slate-400 w-16">Password:</span>
-                    <code className="font-mono">BhandNews@2026</code>
-                    <CopyButton text="BhandNews@2026" />
+                    <code className="font-mono">Bhand8830667147</code>
+                    <CopyButton text="Bhand8830667147" />
                   </div>
                 </div>
                 <button
