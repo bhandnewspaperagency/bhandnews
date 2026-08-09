@@ -70,7 +70,7 @@ export default function LoginPageClient() {
       setTimeout(() => router.push('/admin-dashboard'), 800);
     } else {
       adminForm.setError('password', {
-        message: 'Invalid credentials — use the demo account below to sign in',
+        message: 'Invalid credentials — please check your email and password',
       });
       toast.error('Login failed. Check your credentials.');
     }
@@ -86,7 +86,7 @@ export default function LoginPageClient() {
       setTimeout(() => router.push('/hawker-dashboard'), 800);
     } else {
       hawkerForm.setError('contactNumber', {
-        message: 'Invalid credentials — use the demo accounts below to sign in',
+        message: 'Invalid credentials — verify your name and contact number',
       });
       toast.error('Login failed. Verify your name and contact number.');
     }
@@ -94,8 +94,8 @@ export default function LoginPageClient() {
   };
 
   const autofillAdmin = () => {
-    adminForm.setValue('email', 'admin@bhandnews.in');
-    adminForm.setValue('password', 'BhandNews@2026');
+    adminForm.setValue('email', 'Bhandnews.in');
+    adminForm.setValue('password', '8830667147');
   };
 
   const autofillHawker = (name: string, contact: string) => {
