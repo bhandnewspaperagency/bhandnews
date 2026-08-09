@@ -2,8 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { IndianRupee, Users, MessageSquare, AlertTriangle, TrendingUp, FileText, ArrowRight, CheckCircle2, Clock } from 'lucide-react';
-import { getBillingRecords, getHawkers } from '@/lib/storage';
-import type { DailyBillingRecord, Hawker } from '@/lib/storage';
+import { getBillingRecords, getHawkers } from '@/lib/cloudStorage';
+import type { DailyBillingRecord, Hawker } from '@/lib/cloudStorage';
 import MonthlyTrendChart from './MonthlyTrendChart';
 import NewspaperVolumeChart from './NewspaperVolumeChart';
 
@@ -16,8 +16,8 @@ export default function DashboardOverview({ onNavigate }: DashboardOverviewProps
   const [allHawkers, setAllHawkers] = useState<Hawker[]>([]);
 
   useEffect(() => {
-    setAllBilling(getBillingRecords());
-    setAllHawkers(getHawkers());
+    getBillingRecords().then(setAllBilling);
+    getHawkers().then(setAllHawkers);
   }, []);
 
   const todayStr = new Date().toISOString().split('T')[0];

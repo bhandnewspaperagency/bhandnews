@@ -2,8 +2,8 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Download, FileText, Search, TrendingUp, Users, Newspaper, PackageOpen, PackageCheck, Layers } from 'lucide-react';
-import { getBillingRecords, getHawkers, NEWSPAPERS, getNewspaperGroups } from '@/lib/storage';
-import type { DailyBillingRecord, Hawker, NewspaperGroup } from '@/lib/storage';
+import { getBillingRecords, getHawkers, NEWSPAPERS, getNewspaperGroups } from '@/lib/cloudStorage';
+import type { DailyBillingRecord, Hawker, NewspaperGroup } from '@/lib/cloudStorage';
 
 type ViewMode = 'daily' | 'fullday' | 'monthly';
 
@@ -84,9 +84,15 @@ export default function CopiesTrackerView() {
   const [groups, setGroups] = useState<NewspaperGroup[]>([]);
 
   useEffect(() => {
-    setBillingRecords(getBillingRecords());
-    setHawkers(getHawkers());
-    setGroups(getNewspaperGroups());
+    Promise.all([
+      getBillingRecords(),
+      getHawkers(),
+      getNewspaperGroups(),
+    ]).then(([billing, hks, grps]) => {
+      setBillingRecords(billing);
+      setHawkers(hks);
+      setGroups(grps);
+    });
   }, []);
 
   const activeNPs = useMemo(() => {

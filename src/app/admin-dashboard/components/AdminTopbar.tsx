@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { RefreshCw, Bell, Search, Printer, Menu, Wifi, WifiOff, CloudUpload } from 'lucide-react';
 import { toast } from 'sonner';
-import { getHawkers, getBillingRecords } from '@/lib/storage';
+import { getHawkers, getBillingRecords } from '@/lib/cloudStorage';
 
 const SECTION_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
@@ -85,11 +85,10 @@ export default function AdminTopbar({ activeSection, onMenuToggle }: AdminTopbar
     setSyncing(true);
     setConnectionState('syncing');
     await new Promise((r) => setTimeout(r, 800));
-    const hawkers = getHawkers();
-    const billing = getBillingRecords();
+    const [hawkers, billing] = await Promise.all([getHawkers(), getBillingRecords()]);
     setSyncing(false);
     setConnectionState(navigator.onLine ? 'online' : 'offline');
-    toast.success(`Data synced — ${hawkers.length} hawkers · ${billing.length} billing records loaded from local storage.`);
+    toast.success(`Data synced — ${hawkers.length} hawkers · ${billing.length} billing records loaded from cloud.`);
   };
 
   const handlePrint = () => {

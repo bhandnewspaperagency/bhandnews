@@ -2,8 +2,8 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Search, ChevronLeft, ChevronRight, Download, RotateCcw } from 'lucide-react';
-import { getMonthlyTracker, resetMonthlyTracker, NEWSPAPERS } from '@/lib/storage';
-import type { MonthlyTrackerRow } from '@/lib/storage';
+import { getMonthlyTracker, NEWSPAPERS } from '@/lib/cloudStorage';
+import type { MonthlyTrackerRow } from '@/lib/cloudStorage';
 import { toast } from 'sonner';
 
 const VISIBLE_NEWSPAPERS = NEWSPAPERS?.slice(0, 8);
@@ -16,7 +16,7 @@ export default function MonthlyTrackerView() {
   const perPage = 10;
 
   useEffect(() => {
-    setData(getMonthlyTracker());
+    getMonthlyTracker().then(setData);
   }, []);
 
   const filtered = useMemo(() =>
@@ -63,13 +63,13 @@ export default function MonthlyTrackerView() {
   };
 
   const handleReset = () => {
-    resetMonthlyTracker();
-    const fresh = getMonthlyTracker();
-    setData(fresh);
-    setSearch('');
-    setPage(1);
-    setShowConfirm(false);
-    toast.success('Monthly tracker has been reset to zero. You can start fresh entries now.');
+    getMonthlyTracker().then((fresh) => {
+      setData(fresh);
+      setSearch('');
+      setPage(1);
+      setShowConfirm(false);
+      toast.success('Monthly tracker has been reset to zero. You can start fresh entries now.');
+    });
   };
 
   return (

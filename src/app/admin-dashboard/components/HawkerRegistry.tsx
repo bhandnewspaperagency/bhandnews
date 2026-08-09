@@ -3,8 +3,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Search, Edit2, Trash2, Phone, MapPin, Filter, ChevronUp, ChevronDown, X, UserPlus, Download } from 'lucide-react';
-import { getHawkers, saveHawker, deleteHawker, deleteHawkers } from '@/lib/storage';
-import type { Hawker } from '@/lib/storage';
+import { getHawkers, saveHawker, deleteHawker, deleteHawkers } from '@/lib/cloudStorage';
+import type { Hawker } from '@/lib/cloudStorage';
 import HawkerFormModal from './HawkerFormModal';
 import PinModal from './PinModal';
 
@@ -107,7 +107,7 @@ export default function HawkerRegistry() {
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
 
   useEffect(() => {
-    setHawkers(getHawkers());
+    getHawkers().then(setHawkers);
   }, []);
 
   const filtered = useMemo(() => {
@@ -154,31 +154,34 @@ export default function HawkerRegistry() {
   };
 
   const handleDelete = (id: number) => {
-    deleteHawker(id);
-    setHawkers(getHawkers());
-    setDeleteConfirm(null);
-    toast.success('Hawker removed from registry.');
+    deleteHawker(id).then(() => {
+      getHawkers().then(setHawkers);
+      setDeleteConfirm(null);
+      toast.success('Hawker removed from registry.');
+    });
   };
 
   const handleBulkDelete = () => {
-    deleteHawkers(Array.from(selectedRows));
     const count = selectedRows.size;
-    setHawkers(getHawkers());
-    setSelectedRows(new Set());
-    setShowBulkDeleteConfirm(false);
-    toast.success(`${count} hawkers removed from registry.`);
+    deleteHawkers(Array.from(selectedRows)).then(() => {
+      getHawkers().then(setHawkers);
+      setSelectedRows(new Set());
+      setShowBulkDeleteConfirm(false);
+      toast.success(`${count} hawkers removed from registry.`);
+    });
   };
 
   const handleSaveHawker = (data: Hawker) => {
-    const saved = saveHawker(data);
-    setHawkers(getHawkers());
-    if (editHawker) {
-      toast.success(`${saved.name} updated successfully.`);
-    } else {
-      toast.success(`${saved.name} added to registry.`);
-    }
-    setShowModal(false);
-    setEditHawker(null);
+    saveHawker(data).then((saved) => {
+      getHawkers().then(setHawkers);
+      if (editHawker) {
+        toast.success(`${saved.name} updated successfully.`);
+      } else {
+        toast.success(`${saved.name} added to registry.`);
+      }
+      setShowModal(false);
+      setEditHawker(null);
+    });
   };
 
   const handleExportCSV = () => {

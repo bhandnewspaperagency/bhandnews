@@ -2,8 +2,8 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Download, FileText, Search, TrendingUp, Users, Newspaper, Layers } from 'lucide-react';
-import { getBillingRecords, getMonthlyTracker, getHawkers, NEWSPAPERS, getNewspaperGroups } from '@/lib/storage';
-import type { DailyBillingRecord, MonthlyTrackerRow, Hawker, NewspaperGroup } from '@/lib/storage';
+import { getBillingRecords, getMonthlyTracker, getHawkers, NEWSPAPERS, getNewspaperGroups } from '@/lib/cloudStorage';
+import type { DailyBillingRecord, MonthlyTrackerRow, Hawker, NewspaperGroup } from '@/lib/cloudStorage';
 
 type ViewMode = 'daily' | 'fullday' | 'monthly';
 
@@ -91,10 +91,17 @@ export default function TrackerView() {
   const [groups, setGroups] = useState<NewspaperGroup[]>([]);
 
   useEffect(() => {
-    setBillingRecords(getBillingRecords());
-    setMonthlyData(getMonthlyTracker());
-    setHawkers(getHawkers());
-    setGroups(getNewspaperGroups());
+    Promise.all([
+      getBillingRecords(),
+      getMonthlyTracker(),
+      getHawkers(),
+      getNewspaperGroups(),
+    ]).then(([billing, monthly, hks, grps]) => {
+      setBillingRecords(billing);
+      setMonthlyData(monthly);
+      setHawkers(hks);
+      setGroups(grps);
+    });
   }, []);
 
   // ─── Active newspapers based on selected group ──────────────────────────────

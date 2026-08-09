@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Eye, EyeOff, Newspaper, Shield, User, Phone, Lock, Mail, Copy, CheckCircle, LogIn } from 'lucide-react';
-import { loginAdmin, loginHawker, seedIfNeeded } from '@/lib/storage';
+import { loginAdmin, loginHawker } from '@/lib/cloudStorage';
 
 interface AdminFormValues {
   email: string;
@@ -50,8 +50,8 @@ export default function LoginPageClient() {
   const [showContact, setShowContact] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Ensure data is seeded on first visit
-  React.useEffect(() => { seedIfNeeded(); }, []);
+  // Ensure data is seeded on first visit — cloud storage seeds automatically
+  React.useEffect(() => { /* no-op: cloud storage seeds on first fetch */ }, []);
 
   const adminForm = useForm<AdminFormValues>({
     defaultValues: { email: '', password: '', remember: false },
@@ -80,7 +80,7 @@ export default function LoginPageClient() {
   const handleHawkerSubmit = async (data: HawkerFormValues) => {
     setIsLoading(true);
     await new Promise((r) => setTimeout(r, 600));
-    const hawker = loginHawker(data.hawkerName, data.contactNumber);
+    const hawker = await loginHawker(data.hawkerName, data.contactNumber);
     if (hawker) {
       toast.success(`Welcome, ${hawker.name}! Loading your dashboard…`);
       setTimeout(() => router.push('/hawker-dashboard'), 800);

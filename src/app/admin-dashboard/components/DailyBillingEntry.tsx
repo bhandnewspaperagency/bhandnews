@@ -4,8 +4,8 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { Search, Send, CheckCircle2, AlertCircle, MessageSquare, ChevronDown, Printer, Info, Settings, X, Save, Trash2, Mic, MicOff, Volume2 } from 'lucide-react';
-import { getHawkers, saveBillingRecord, getRateForDate, getPreviousDayRate, getFreeQtyForHawker, saveFreeQtyForHawker, getExistingBillingRecord, deleteBillingRecordForHawkerDate, getNewspaperList } from '@/lib/storage';
-import type { Hawker, DailyBillingRecord, HawkerFreeQtyEntry, NewspaperEntry } from '@/lib/storage';
+import { getHawkers, saveBillingRecord, getRateForDate, getPreviousDayRate, getFreeQtyForHawker, saveFreeQtyForHawker, getExistingBillingRecord, deleteBillingRecordForHawkerDate, getNewspaperList } from '@/lib/cloudStorage';
+import type { Hawker, DailyBillingRecord, HawkerFreeQtyEntry, NewspaperEntry } from '@/lib/cloudStorage';
 import PinModal from './PinModal';
 
 interface BillingRow {
@@ -30,13 +30,18 @@ interface FreeQtyModalProps {
 }
 
 function FreeQtyModal({ hawker, newspapers, onClose, onSaved }: FreeQtyModalProps) {
-  const [freeQtys, setFreeQtys] = useState<number[]>(() => {
-    const saved = getFreeQtyForHawker(hawker.id);
-    return newspapers.map((np) => {
-      const found = saved.find((e) => e.newspaper === np.name);
-      return found ? found.freeQty : 0;
+  const [freeQtys, setFreeQtys] = useState<number[]>(() =>
+    newspapers.map(() => 0)
+  );
+
+  useEffect(() => {
+    getFreeQtyForHawker(hawker.id).then((saved) => {
+      setFreeQtys(newspapers.map((np) => {
+        const found = saved.find((e) => e.newspaper === np.name);
+        return found ? found.freeQty : 0;
+      }));
     });
-  });
+  }, [hawker.id, newspapers]);
 
   const handleChange = (i: number, val: string) => {
     const num = parseInt(val) || 0;
@@ -52,10 +57,11 @@ function FreeQtyModal({ hawker, newspapers, onClose, onSaved }: FreeQtyModalProp
       newspaper: np.name,
       freeQty: freeQtys[i],
     }));
-    saveFreeQtyForHawker(hawker.id, entries);
-    onSaved(entries);
-    toast.success(`Free quantity settings saved for ${hawker.name}`);
-    onClose();
+    saveFreeQtyForHawker(hawker.id, entries).then(() => {
+      onSaved(entries);
+      toast.success(`Free quantity settings saved for ${hawker.name}`);
+      onClose();
+    });
   };
 
   return (
@@ -560,20 +566,26 @@ export default function DailyBillingEntry() {
 
   // Load hawkers and dynamic newspaper list on mount
   useEffect(() => {
-    setHawkers(getHawkers());
-    const npList = getNewspaperList();
-    setNewspapers(npList);
-    setRows(npList.map(() => ({ supplyQty: 0, returnQty: 0, freePvc: 0 })));
-    // Initialize rates from Rate Management for today
-    const todayDate = (() => {
-      const d = new Date();
-      const y = d.getFullYear();
-      const mo = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${y}-${mo}-${day}`;
-    })();
-    setSupplyRates(npList.map((np) => getRateForDate(np.name, todayDate)));
-    setReturnRates(npList.map((np) => getPreviousDayRate(np.name, todayDate)));
+    Promise.all([getHawkers(), getNewspaperList()]).then(([hks, npList]) => {
+      setHawkers(hks);
+      setNewspapers(npList);
+      setRows(npList.map(() => ({ supplyQty: 0, returnQty: 0, freePvc: 0 })));
+      // Initialize rates from Rate Management for today
+      const todayDate = (() => {
+        const d = new Date();
+        const y = d.getFullYear();
+        const mo = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${mo}-${day}`;
+      })();
+      Promise.all([
+        Promise.all(npList.map((np) => getRateForDate(np.name, todayDate))),
+        Promise.all(npList.map((np) => getPreviousDayRate(np.name, todayDate))),
+      ]).then(([sRates, rRates]) => {
+        setSupplyRates(sRates);
+        setReturnRates(rRates);
+      });
+    });
   }, []);
 
   const { register, handleSubmit, setValue, watch } = useForm<BillingFormValues>({
@@ -590,64 +602,67 @@ export default function DailyBillingEntry() {
   // Recalculate rates whenever billDate or newspapers change
   useEffect(() => {
     if (!billDate || newspapers.length === 0) return;
-    const sRates = newspapers.map((np) => getRateForDate(np.name, billDate));
-    const rRates = newspapers.map((np) => getPreviousDayRate(np.name, billDate));
-    setSupplyRates(sRates);
-    setReturnRates(rRates);
-    // On Sunday, auto-zero supply qty for Lokmat SSA — preserve freePvc
-    const sunday = new Date(billDate).getDay() === 0;
-    if (sunday) {
-      setRows((prev) =>
-        prev.map((row, i) =>
-          newspapers[i]?.name === 'Lokmat SSA' ? { ...row, supplyQty: 0 } : row
-        )
-      );
-    }
+    Promise.all([
+      Promise.all(newspapers.map((np) => getRateForDate(np.name, billDate))),
+      Promise.all(newspapers.map((np) => getPreviousDayRate(np.name, billDate))),
+    ]).then(([sRates, rRates]) => {
+      setSupplyRates(sRates);
+      setReturnRates(rRates);
+      // On Sunday, auto-zero supply qty for Lokmat SSA — preserve freePvc
+      const sunday = new Date(billDate).getDay() === 0;
+      if (sunday) {
+        setRows((prev) =>
+          prev.map((row, i) =>
+            newspapers[i]?.name === 'Lokmat SSA' ? { ...row, supplyQty: 0 } : row
+          )
+        );
+      }
+    });
     // NOTE: Do NOT reset freePvc here — that is managed by the hawker/date useEffect
   }, [billDate, newspapers]);
 
   // When hawker or date changes, try to load existing saved record
   useEffect(() => {
     if (!selectedHawker || !billDate || newspapers.length === 0) return;
-    const existing = getExistingBillingRecord(selectedHawker.id, billDate);
-    const savedFreeQty = getFreeQtyForHawker(selectedHawker.id);
-    if (existing && existing.entries.length > 0) {
-      // Pre-populate rows from saved record
-      const newRows = newspapers.map((np) => {
-        const entry = existing.entries.find((e) => e.newspaper === np.name);
-        if (entry) {
-          // Compute freePvc from saved netQty; if it's 0, fall back to saved free qty settings
-          const computedFreePvc = entry.netQty !== undefined
-            ? Math.max(0, entry.supplyQty - entry.netQty)
-            : 0;
-          const freeEntry = savedFreeQty.find((e) => e.newspaper === np.name);
-          // Use saved free qty settings as fallback if computed value is 0 but settings exist
-          const freePvc = computedFreePvc > 0 ? computedFreePvc : (freeEntry ? freeEntry.freeQty : 0);
-          return {
-            supplyQty: entry.supplyQty,
-            returnQty: entry.returnQty,
-            freePvc,
-          };
-        }
-        // fallback: apply free qty settings for newspapers not in saved record
-        const freeEntry = savedFreeQty.find((e) => e.newspaper === np.name);
-        return { supplyQty: 0, returnQty: 0, freePvc: freeEntry ? freeEntry.freeQty : 0 };
-      });
-      setRows(newRows);
-      setValue('paymentType', existing.paymentType as 'Cash' | 'UPI' | 'Credit');
-      setIsDataPreloaded(true);
-      setSubmitted(true);
-    } else {
-      // No existing record for this date — apply saved free qty settings
-      setRows(
-        newspapers.map((np) => {
+    Promise.all([
+      getExistingBillingRecord(selectedHawker.id, billDate),
+      getFreeQtyForHawker(selectedHawker.id),
+    ]).then(([existing, savedFreeQty]) => {
+      if (existing && existing.entries.length > 0) {
+        // Pre-populate rows from saved record
+        const newRows = newspapers.map((np) => {
+          const entry = existing.entries.find((e) => e.newspaper === np.name);
+          if (entry) {
+            const computedFreePvc = entry.netQty !== undefined
+              ? Math.max(0, entry.supplyQty - entry.netQty)
+              : 0;
+            const freeEntry = savedFreeQty.find((e) => e.newspaper === np.name);
+            const freePvc = computedFreePvc > 0 ? computedFreePvc : (freeEntry ? freeEntry.freeQty : 0);
+            return {
+              supplyQty: entry.supplyQty,
+              returnQty: entry.returnQty,
+              freePvc,
+            };
+          }
           const freeEntry = savedFreeQty.find((e) => e.newspaper === np.name);
           return { supplyQty: 0, returnQty: 0, freePvc: freeEntry ? freeEntry.freeQty : 0 };
-        })
-      );
-      setIsDataPreloaded(false);
-      setSubmitted(false);
-    }
+        });
+        setRows(newRows);
+        setValue('paymentType', existing.paymentType as 'Cash' | 'UPI' | 'Credit');
+        setIsDataPreloaded(true);
+        setSubmitted(true);
+      } else {
+        // No existing record for this date — apply saved free qty settings
+        setRows(
+          newspapers.map((np) => {
+            const freeEntry = savedFreeQty.find((e) => e.newspaper === np.name);
+            return { supplyQty: 0, returnQty: 0, freePvc: freeEntry ? freeEntry.freeQty : 0 };
+          })
+        );
+        setIsDataPreloaded(false);
+        setSubmitted(false);
+      }
+    });
   }, [selectedHawker, billDate, newspapers]);
 
   const updateRow = (index: number, field: 'supplyQty' | 'returnQty' | 'freePvc', value: string) => {
@@ -701,15 +716,16 @@ export default function DailyBillingEntry() {
 
   // Auto-fill Free PVC from saved settings when hawker is selected
   const applyFreeQtySettings = (hawker: Hawker) => {
-    const saved = getFreeQtyForHawker(hawker.id);
-    if (saved.length > 0) {
-      setRows((prev) =>
-        prev.map((row, i) => {
-          const entry = saved.find((e) => e.newspaper === newspapers[i]?.name);
-          return entry ? { ...row, freePvc: entry.freeQty } : row;
-        })
-      );
-    }
+    getFreeQtyForHawker(hawker.id).then((saved) => {
+      if (saved.length > 0) {
+        setRows((prev) =>
+          prev.map((row, i) => {
+            const entry = saved.find((e) => e.newspaper === newspapers[i]?.name);
+            return entry ? { ...row, freePvc: entry.freeQty } : row;
+          })
+        );
+      }
+    });
   };
 
   const handleSelectHawker = (hawker: Hawker) => {
@@ -720,13 +736,14 @@ export default function DailyBillingEntry() {
     setSubmitted(false);
     setShowResetConfirm(false);
     // Reset rows first, then apply saved free qty settings
-    const saved = getFreeQtyForHawker(hawker.id);
-    setRows(
-      newspapers.map((np) => {
-        const entry = saved.find((e) => e.newspaper === np.name);
-        return { supplyQty: 0, returnQty: 0, freePvc: entry ? entry.freeQty : 0 };
-      })
-    );
+    getFreeQtyForHawker(hawker.id).then((saved) => {
+      setRows(
+        newspapers.map((np) => {
+          const entry = saved.find((e) => e.newspaper === np.name);
+          return { supplyQty: 0, returnQty: 0, freePvc: entry ? entry.freeQty : 0 };
+        })
+      );
+    });
     // The useEffect for selectedHawker+billDate will fire and load existing record if any
   };
 
@@ -778,7 +795,6 @@ export default function DailyBillingEntry() {
       total: getTotal(i),
     })).filter((e) => e.supplyQty > 0);
 
-    // Use a stable ID based on hawker+date so re-saving updates the same record
     const record: DailyBillingRecord = {
       id: `bill-${formData.date.replace(/-/g, '')}-${selectedHawker.id}`,
       hawkerId: selectedHawker.id,
@@ -791,7 +807,7 @@ export default function DailyBillingEntry() {
       paymentType: formData.paymentType,
     };
 
-    saveBillingRecord(record);
+    await saveBillingRecord(record);
     setIsSubmitting(false);
     setSubmitted(true);
     setIsDataPreloaded(true);
@@ -841,35 +857,38 @@ export default function DailyBillingEntry() {
   // Reset only the current day's data for the selected hawker
   const handleResetDayData = () => {
     if (!selectedHawker || !billDate) return;
-    deleteBillingRecordForHawkerDate(selectedHawker.id, billDate);
-    // Restore rows to free qty defaults only
-    const saved = getFreeQtyForHawker(selectedHawker.id);
-    setRows(
-      newspapers.map((np) => {
-        const entry = saved.find((e) => e.newspaper === np.name);
-        return { supplyQty: 0, returnQty: 0, freePvc: entry ? entry.freeQty : 0 };
-      })
-    );
-    setSubmitted(false);
-    setIsDataPreloaded(false);
-    setShowResetConfirm(false);
-    toast.success(`Billing data reset for ${selectedHawker.name} on ${new Date(billDate).toLocaleDateString('en-IN')}`);
+    deleteBillingRecordForHawkerDate(selectedHawker.id, billDate).then(() => {
+      getFreeQtyForHawker(selectedHawker.id).then((saved) => {
+        setRows(
+          newspapers.map((np) => {
+            const entry = saved.find((e) => e.newspaper === np.name);
+            return { supplyQty: 0, returnQty: 0, freePvc: entry ? entry.freeQty : 0 };
+          })
+        );
+        setSubmitted(false);
+        setIsDataPreloaded(false);
+        setShowResetConfirm(false);
+        toast.success(`Billing data reset for ${selectedHawker.name} on ${new Date(billDate).toLocaleDateString('en-IN')}`);
+      });
+    });
   };
 
   const handleDeleteBillingEntry = () => {
     if (!selectedHawker || !billDate) return;
-    deleteBillingRecordForHawkerDate(selectedHawker.id, billDate);
-    const saved = getFreeQtyForHawker(selectedHawker.id);
-    setRows(
-      newspapers.map((np) => {
-        const entry = saved.find((e) => e.newspaper === np.name);
-        return { supplyQty: 0, returnQty: 0, freePvc: entry ? entry.freeQty : 0 };
-      })
-    );
-    setSubmitted(false);
-    setIsDataPreloaded(false);
-    setShowDeleteBillingConfirm(false);
-    toast.success(`Billing entry deleted for ${selectedHawker.name} on ${new Date(billDate).toLocaleDateString('en-IN')}`);
+    deleteBillingRecordForHawkerDate(selectedHawker.id, billDate).then(() => {
+      getFreeQtyForHawker(selectedHawker.id).then((saved) => {
+        setRows(
+          newspapers.map((np) => {
+            const entry = saved.find((e) => e.newspaper === np.name);
+            return { supplyQty: 0, returnQty: 0, freePvc: entry ? entry.freeQty : 0 };
+          })
+        );
+        setSubmitted(false);
+        setIsDataPreloaded(false);
+        setShowDeleteBillingConfirm(false);
+        toast.success(`Billing entry deleted for ${selectedHawker.name} on ${new Date(billDate).toLocaleDateString('en-IN')}`);
+      });
+    });
   };
 
   const handlePrint = () => {

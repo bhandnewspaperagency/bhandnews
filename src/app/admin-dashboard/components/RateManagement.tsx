@@ -9,8 +9,8 @@ import {
   deleteRatesForDate,
   getRatesForDate,
   getNewspaperList,
-} from '@/lib/storage';
-import type { NewspaperRateEntry, NewspaperEntry } from '@/lib/storage';
+} from '@/lib/cloudStorage';
+import type { NewspaperRateEntry, NewspaperEntry } from '@/lib/cloudStorage';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -106,7 +106,7 @@ export default function RateManagement() {
   const [deleteConfirmDate, setDeleteConfirmDate] = useState<string | null>(null);
 
   // all saved rate records (for lookup)
-  const [, setAllRates] = useState<ReturnType<typeof getAllRates>>([]);
+  const [allRatesData, setAllRatesData] = useState<Awaited<ReturnType<typeof getAllRates>>>([]);
 
   // dynamic newspaper list
   const [newspapers, setNewspapers] = useState<NewspaperEntry[]>([]);
@@ -115,27 +115,27 @@ export default function RateManagement() {
   const weekDates: string[] = Array.from({ length: 7 }, (_, i) => toISO(addDays(weekStart, i)));
 
   const reload = useCallback(() => {
-    setAllRates(getAllRates());
-    setNewspapers(getNewspaperList());
+    Promise.all([getAllRates(), getNewspaperList()]).then(([rates, nps]) => {
+      setAllRatesData(rates);
+      setNewspapers(nps);
+    });
   }, []);
 
   useEffect(() => { reload(); }, [reload]);
 
   // ── get effective rate for a newspaper on a date ──────────────────────────
-  // (uses saved record for that exact date, or falls back to default)
   const getRateValue = (newspaper: string, dateISO: string): number => {
-    const saved = getRatesForDate(dateISO);
-    if (saved) {
-      const entry = saved.find((r) => r.newspaper === newspaper);
+    const record = allRatesData.find((r) => r.date === dateISO);
+    if (record) {
+      const entry = record.rates.find((r) => r.newspaper === newspaper);
       if (entry) return entry.rate;
     }
-    // Fall back to dynamic newspaper default rate
     const np = newspapers.find((n) => n.name === newspaper);
     return np?.rate ?? 0;
   };
 
   const hasCustomRates = (dateISO: string): boolean => {
-    return !!getRatesForDate(dateISO);
+    return allRatesData.some((r) => r.date === dateISO);
   };
 
   // ── edit helpers ──────────────────────────────────────────────────────────
@@ -163,18 +163,20 @@ export default function RateManagement() {
       toast.error('Please enter valid rates for all newspapers.');
       return;
     }
-    saveRatesForDate(editingDay, rates);
-    reload();
-    setEditingDay(null);
-    setRateInputs({});
-    toast.success(`Rates saved for ${formatShortDate(editingDay)}`);
+    saveRatesForDate(editingDay, rates).then(() => {
+      reload();
+      setEditingDay(null);
+      setRateInputs({});
+      toast.success(`Rates saved for ${formatShortDate(editingDay)}`);
+    });
   };
 
   const clearDay = (dateISO: string) => {
-    deleteRatesForDate(dateISO);
-    reload();
-    setDeleteConfirmDate(null);
-    toast.success(`Custom rates cleared for ${formatShortDate(dateISO)}`);
+    deleteRatesForDate(dateISO).then(() => {
+      reload();
+      setDeleteConfirmDate(null);
+      toast.success(`Custom rates cleared for ${formatShortDate(dateISO)}`);
+    });
   };
 
   // ── week navigation ───────────────────────────────────────────────────────

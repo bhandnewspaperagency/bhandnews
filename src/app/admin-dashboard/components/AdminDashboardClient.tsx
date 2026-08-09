@@ -14,7 +14,7 @@ import CopiesTrackerView from './CopiesTrackerView';
 import NewspaperGroups from './NewspaperGroups';
 import BackupRestore from './BackupRestore';
 import SettingsView from './SettingsView';
-import { restoreFromBackupIfNeeded } from '@/lib/storage';
+import { restoreFromBackupIfNeeded } from '@/lib/cloudStorage';
 
 export default function AdminDashboardClient() {
   const [activeSection, setActiveSection] = useState('dashboard');

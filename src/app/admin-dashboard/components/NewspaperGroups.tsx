@@ -7,8 +7,8 @@ import {
   saveNewspaperGroup,
   deleteNewspaperGroup,
   NEWSPAPERS,
-} from '@/lib/storage';
-import type { NewspaperGroup } from '@/lib/storage';
+} from '@/lib/cloudStorage';
+import type { NewspaperGroup } from '@/lib/cloudStorage';
 
 const GROUP_COLORS = [
   { label: 'Blue', value: 'hsl(210,67%,23%)' },
@@ -42,10 +42,10 @@ export default function NewspaperGroups() {
   const [form, setForm] = useState<GroupFormState>(emptyForm());
 
   useEffect(() => {
-    setGroups(getNewspaperGroups());
+    getNewspaperGroups().then(setGroups);
   }, []);
 
-  const refresh = () => setGroups(getNewspaperGroups());
+  const refresh = () => getNewspaperGroups().then(setGroups);
 
   const startNew = () => {
     setForm(emptyForm());
@@ -70,15 +70,15 @@ export default function NewspaperGroups() {
       newspapers: form.newspapers,
       color: form.color,
     };
-    saveNewspaperGroup(group);
-    refresh();
-    cancelEdit();
+    saveNewspaperGroup(group).then(() => {
+      refresh();
+      cancelEdit();
+    });
   };
 
   const handleDelete = (id: string) => {
     if (!confirm('Delete this group?')) return;
-    deleteNewspaperGroup(id);
-    refresh();
+    deleteNewspaperGroup(id).then(refresh);
   };
 
   const toggleNP = (np: string) => {

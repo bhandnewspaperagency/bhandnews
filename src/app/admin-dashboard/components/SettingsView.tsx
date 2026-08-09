@@ -23,8 +23,8 @@ import {
   Users,
 } from 'lucide-react';
 import { NEWSPAPERS } from '@/lib/mockData';
-import { getNewspaperList, addNewspaper, updateNewspaper, deleteNewspaper, type NewspaperEntry, getHawkers, getFreeQtyForHawker, saveFreeQtyForHawker, type HawkerFreeQtyEntry } from '@/lib/storage';
-import type { Hawker } from '@/lib/storage';
+import { getNewspaperList, addNewspaper, updateNewspaper, deleteNewspaper, type NewspaperEntry, getHawkers, getFreeQtyForHawker, saveFreeQtyForHawker, type HawkerFreeQtyEntry } from '@/lib/cloudStorage';
+import type { Hawker } from '@/lib/cloudStorage';
 
 interface NewspaperRate {
   name: string;
@@ -85,22 +85,23 @@ export default function SettingsView() {
 
   useEffect(() => {
     if (activeTab === 'free') {
-      const hawkers = getHawkers();
-      const npList = getNewspaperList();
-      setAllHawkers(hawkers);
-      setFreeQtyNewspapers(npList);
-      // Load existing free qty for all hawkers
-      const map: Record<number, Record<string, number>> = {};
-      hawkers.forEach((h) => {
-        const entries = getFreeQtyForHawker(h.id);
-        const npMap: Record<string, number> = {};
-        npList.forEach((np) => {
-          const found = entries.find((e) => e.newspaper === np.name);
-          npMap[np.name] = found ? found.freeQty : 0;
+      Promise.all([getHawkers(), getNewspaperList()]).then(([hawkers, npList]) => {
+        setAllHawkers(hawkers);
+        setFreeQtyNewspapers(npList);
+        // Load existing free qty for all hawkers
+        Promise.all(hawkers.map((h) => getFreeQtyForHawker(h.id).then((entries) => ({ h, entries })))).then((results) => {
+          const map: Record<number, Record<string, number>> = {};
+          results.forEach(({ h, entries }) => {
+            const npMap: Record<string, number> = {};
+            npList.forEach((np) => {
+              const found = entries.find((e) => e.newspaper === np.name);
+              npMap[np.name] = found ? found.freeQty : 0;
+            });
+            map[h.id] = npMap;
+          });
+          setFreeQtyMap(map);
         });
-        map[h.id] = npMap;
       });
-      setFreeQtyMap(map);
     }
   }, [activeTab]);
 
@@ -113,16 +114,19 @@ export default function SettingsView() {
   };
 
   const handleSaveAllFreeQty = () => {
-    allHawkers.forEach((h) => {
-      const npMap = freeQtyMap[h.id] || {};
-      const entries: HawkerFreeQtyEntry[] = freeQtyNewspapers.map((np) => ({
-        newspaper: np.name,
-        freeQty: npMap[np.name] || 0,
-      }));
-      saveFreeQtyForHawker(h.id, entries);
+    Promise.all(
+      allHawkers.map((h) => {
+        const npMap = freeQtyMap[h.id] || {};
+        const entries: HawkerFreeQtyEntry[] = freeQtyNewspapers.map((np) => ({
+          newspaper: np.name,
+          freeQty: npMap[np.name] || 0,
+        }));
+        return saveFreeQtyForHawker(h.id, entries);
+      })
+    ).then(() => {
+      setFreeQtySaved(true);
+      setTimeout(() => setFreeQtySaved(false), 2500);
     });
-    setFreeQtySaved(true);
-    setTimeout(() => setFreeQtySaved(false), 2500);
   };
 
   const filteredFreeQtyHawkers = allHawkers.filter(
@@ -204,7 +208,7 @@ export default function SettingsView() {
   const [deletePinError, setDeletePinError] = useState('');
 
   useEffect(() => {
-    setNewspapers(getNewspaperList());
+    getNewspaperList().then(setNewspapers);
   }, []);
 
   const handleSave = () => {
@@ -265,10 +269,11 @@ export default function SettingsView() {
     const name = newNpName.trim();
     const rate = parseFloat(newNpRate);
     if (!name || isNaN(rate) || rate < 0) return;
-    const added = addNewspaper({ name, rate });
-    setNewspapers((prev) => [...prev, added]);
-    setNewNpName('');
-    setNewNpRate('');
+    addNewspaper({ name, rate }).then((added) => {
+      setNewspapers((prev) => [...prev, added]);
+      setNewNpName('');
+      setNewNpRate('');
+    });
   };
 
   const handleStartEdit = (np: NewspaperEntry) => {
@@ -281,11 +286,12 @@ export default function SettingsView() {
     const name = editNpName.trim();
     const rate = parseFloat(editNpRate);
     if (!name || isNaN(rate) || rate < 0) return;
-    updateNewspaper(id, { name, rate });
-    setNewspapers((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, name, rate } : n))
-    );
-    setEditingNpId(null);
+    updateNewspaper(id, { name, rate }).then(() => {
+      setNewspapers((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, name, rate } : n))
+      );
+      setEditingNpId(null);
+    });
   };
 
   const handleCancelEdit = () => {
@@ -302,11 +308,12 @@ export default function SettingsView() {
 
   const handleDeleteWithPin = () => {
     if (deletePinInput === SETTINGS_PIN) {
-      deleteNewspaper(deleteConfirmId!);
-      setNewspapers((prev) => prev.filter((n) => n.id !== deleteConfirmId));
-      setDeleteConfirmId(null);
-      setDeletePinInput('');
-      setDeletePinError('');
+      deleteNewspaper(deleteConfirmId!).then(() => {
+        setNewspapers((prev) => prev.filter((n) => n.id !== deleteConfirmId));
+        setDeleteConfirmId(null);
+        setDeletePinInput('');
+        setDeletePinError('');
+      });
     } else {
       setDeletePinError('Incorrect PIN.');
       setDeletePinInput('');
