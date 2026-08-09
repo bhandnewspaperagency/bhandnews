@@ -7,6 +7,7 @@ import { getSession, clearSession, getBillingByHawker, getMonthlyTracker, getHaw
 import type { DailyBillingRecord, MonthlyTrackerRow, Hawker } from '@/lib/cloudStorage';
 import HawkerBillingTable from './HawkerBillingTable';
 import HawkerMonthlyView from './HawkerMonthlyView';
+import SyncStatusBadge from '@/components/ui/SyncStatusBadge';
 
 export default function HawkerDashboardClient() {
   const router = useRouter();
@@ -124,6 +125,8 @@ export default function HawkerDashboardClient() {
             <Printer size={14} />
             Print
           </button>
+          {/* Sync status badge */}
+          <SyncStatusBadge />
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-[hsl(36,80%,52%)] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
               {hawker.name.charAt(0)}

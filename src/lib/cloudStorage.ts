@@ -45,6 +45,14 @@ function supabase() {
   return createClient();
 }
 
+// ─── Sync Status Emitter ──────────────────────────────────────────────────────
+
+function emitSync(status: 'syncing' | 'synced' | 'error') {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('supabase-sync-status', { detail: { status } }));
+  }
+}
+
 // ─── Hawkers ─────────────────────────────────────────────────────────────────
 
 export async function getHawkers(): Promise<Hawker[]> {
@@ -68,6 +76,7 @@ async function seedHawkers(): Promise<void> {
 }
 
 export async function saveHawker(hawker: Hawker): Promise<Hawker> {
+  emitSync('syncing');
   const existing = await getHawkers();
   let finalHawker = hawker;
   if (!hawker.id || hawker.id === 0) {
@@ -77,18 +86,23 @@ export async function saveHawker(hawker: Hawker): Promise<Hawker> {
   const { error } = await supabase()
     .from('hawkers')
     .upsert(hawkerToRow(finalHawker), { onConflict: 'id' });
-  if (error) console.error('saveHawker error:', error.message);
+  if (error) { console.error('saveHawker error:', error.message); emitSync('error'); }
+  else emitSync('synced');
   return finalHawker;
 }
 
 export async function deleteHawker(id: number): Promise<void> {
+  emitSync('syncing');
   const { error } = await supabase().from('hawkers').delete().eq('id', id);
-  if (error) console.error('deleteHawker error:', error.message);
+  if (error) { console.error('deleteHawker error:', error.message); emitSync('error'); }
+  else emitSync('synced');
 }
 
 export async function deleteHawkers(ids: number[]): Promise<void> {
+  emitSync('syncing');
   const { error } = await supabase().from('hawkers').delete().in('id', ids);
-  if (error) console.error('deleteHawkers error:', error.message);
+  if (error) { console.error('deleteHawkers error:', error.message); emitSync('error'); }
+  else emitSync('synced');
 }
 
 export async function getHawkerById(id: number): Promise<Hawker | undefined> {
@@ -136,11 +150,13 @@ export async function getBillingRecords(): Promise<DailyBillingRecord[]> {
 }
 
 export async function saveBillingRecord(record: DailyBillingRecord): Promise<void> {
+  emitSync('syncing');
   const row = billingToRow(record);
   const { error } = await supabase()
     .from('billing_records')
     .upsert(row, { onConflict: 'id' });
-  if (error) console.error('saveBillingRecord error:', error.message);
+  if (error) { console.error('saveBillingRecord error:', error.message); emitSync('error'); }
+  else emitSync('synced');
 }
 
 export async function getBillingByHawker(hawkerId: number): Promise<DailyBillingRecord[]> {
@@ -189,12 +205,14 @@ export async function deleteBillingRecordForHawkerDate(
   hawkerId: number,
   date: string
 ): Promise<void> {
+  emitSync('syncing');
   const { error } = await supabase()
     .from('billing_records')
     .delete()
     .eq('hawker_id', hawkerId)
     .eq('date', date);
-  if (error) console.error('deleteBillingRecordForHawkerDate error:', error.message);
+  if (error) { console.error('deleteBillingRecordForHawkerDate error:', error.message); emitSync('error'); }
+  else emitSync('synced');
 }
 
 function rowToBilling(row: any): DailyBillingRecord {
@@ -302,15 +320,19 @@ export async function getPreviousDayRate(newspaper: string, date: string): Promi
 }
 
 export async function saveRatesForDate(date: string, rates: NewspaperRateEntry[]): Promise<void> {
+  emitSync('syncing');
   const { error } = await supabase()
     .from('daily_rates')
     .upsert({ date, rates }, { onConflict: 'date' });
-  if (error) console.error('saveRatesForDate error:', error.message);
+  if (error) { console.error('saveRatesForDate error:', error.message); emitSync('error'); }
+  else emitSync('synced');
 }
 
 export async function deleteRatesForDate(date: string): Promise<void> {
+  emitSync('syncing');
   const { error } = await supabase().from('daily_rates').delete().eq('date', date);
-  if (error) console.error('deleteRatesForDate error:', error.message);
+  if (error) { console.error('deleteRatesForDate error:', error.message); emitSync('error'); }
+  else emitSync('synced');
 }
 
 export async function getRatesForDate(date: string): Promise<NewspaperRateEntry[] | null> {
@@ -343,6 +365,7 @@ export async function getNewspaperGroups(): Promise<NewspaperGroup[]> {
 }
 
 export async function saveNewspaperGroup(group: NewspaperGroup): Promise<NewspaperGroup> {
+  emitSync('syncing');
   const row = {
     id: group.id || `grp-${Date.now()}`,
     name: group.name,
@@ -352,13 +375,16 @@ export async function saveNewspaperGroup(group: NewspaperGroup): Promise<Newspap
   const { error } = await supabase()
     .from('newspaper_groups')
     .upsert(row, { onConflict: 'id' });
-  if (error) console.error('saveNewspaperGroup error:', error.message);
+  if (error) { console.error('saveNewspaperGroup error:', error.message); emitSync('error'); }
+  else emitSync('synced');
   return { ...group, id: row.id };
 }
 
 export async function deleteNewspaperGroup(id: string): Promise<void> {
+  emitSync('syncing');
   const { error } = await supabase().from('newspaper_groups').delete().eq('id', id);
-  if (error) console.error('deleteNewspaperGroup error:', error.message);
+  if (error) { console.error('deleteNewspaperGroup error:', error.message); emitSync('error'); }
+  else emitSync('synced');
 }
 
 // ─── Hawker Free Qty Settings ─────────────────────────────────────────────────
@@ -389,10 +415,12 @@ export async function saveFreeQtyForHawker(
   hawkerId: number,
   entries: HawkerFreeQtyEntry[]
 ): Promise<void> {
+  emitSync('syncing');
   const { error } = await supabase()
     .from('hawker_free_qty')
     .upsert({ hawker_id: hawkerId, entries }, { onConflict: 'hawker_id' });
-  if (error) console.error('saveFreeQtyForHawker error:', error.message);
+  if (error) { console.error('saveFreeQtyForHawker error:', error.message); emitSync('error'); }
+  else emitSync('synced');
 }
 
 // ─── Copies Records ───────────────────────────────────────────────────────────
@@ -416,6 +444,7 @@ export async function getCopiesRecords(): Promise<CopiesRecord[]> {
 }
 
 export async function saveCopiesRecord(record: CopiesRecord): Promise<void> {
+  emitSync('syncing');
   const { error } = await supabase()
     .from('copies_records')
     .upsert(
@@ -428,12 +457,15 @@ export async function saveCopiesRecord(record: CopiesRecord): Promise<void> {
       },
       { onConflict: 'id' }
     );
-  if (error) console.error('saveCopiesRecord error:', error.message);
+  if (error) { console.error('saveCopiesRecord error:', error.message); emitSync('error'); }
+  else emitSync('synced');
 }
 
 export async function deleteCopiesRecord(id: string): Promise<void> {
+  emitSync('syncing');
   const { error } = await supabase().from('copies_records').delete().eq('id', id);
-  if (error) console.error('deleteCopiesRecord error:', error.message);
+  if (error) { console.error('deleteCopiesRecord error:', error.message); emitSync('error'); }
+  else emitSync('synced');
 }
 
 // ─── Newspaper List ───────────────────────────────────────────────────────────
@@ -473,19 +505,23 @@ async function seedNewspaperList(): Promise<void> {
 }
 
 export async function saveNewspaperList(list: NewspaperEntry[]): Promise<void> {
+  emitSync('syncing');
   const rows = list.map((n) => ({ id: n.id, name: n.name, rate: n.rate }));
   const { error } = await supabase().from('newspapers_list').upsert(rows, { onConflict: 'id' });
-  if (error) console.error('saveNewspaperList error:', error.message);
+  if (error) { console.error('saveNewspaperList error:', error.message); emitSync('error'); }
+  else emitSync('synced');
 }
 
 export async function addNewspaper(entry: Omit<NewspaperEntry, 'id'>): Promise<NewspaperEntry> {
+  emitSync('syncing');
   const newEntry: NewspaperEntry = {
     id: `np_${Date.now()}`,
     name: entry.name.trim(),
     rate: entry.rate,
   };
   const { error } = await supabase().from('newspapers_list').insert(newEntry);
-  if (error) console.error('addNewspaper error:', error.message);
+  if (error) { console.error('addNewspaper error:', error.message); emitSync('error'); }
+  else emitSync('synced');
   return newEntry;
 }
 
@@ -493,13 +529,17 @@ export async function updateNewspaper(
   id: string,
   updates: Partial<Omit<NewspaperEntry, 'id'>>
 ): Promise<void> {
+  emitSync('syncing');
   const { error } = await supabase().from('newspapers_list').update(updates).eq('id', id);
-  if (error) console.error('updateNewspaper error:', error.message);
+  if (error) { console.error('updateNewspaper error:', error.message); emitSync('error'); }
+  else emitSync('synced');
 }
 
 export async function deleteNewspaper(id: string): Promise<void> {
+  emitSync('syncing');
   const { error } = await supabase().from('newspapers_list').delete().eq('id', id);
-  if (error) console.error('deleteNewspaper error:', error.message);
+  if (error) { console.error('deleteNewspaper error:', error.message); emitSync('error'); }
+  else emitSync('synced');
 }
 
 // ─── Auth (unchanged — still uses local PIN-based auth) ───────────────────────
